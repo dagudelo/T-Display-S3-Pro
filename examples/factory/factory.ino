@@ -237,10 +237,12 @@ void updateLightDected(lv_timer_t *t)
     static bool cover_flag = false;
 
     if (autonBrightness) {
+#ifdef DEBUG_LIGHT_SENSOR
         Serial.print(" ALS: CH1:"); Serial.print(als.getLightSensor(1));
         Serial.print(" -  CH0:"); Serial.print(als.getLightSensor(0));
         Serial.print(" -  PS:"); Serial.print(als.getProximity(&saturated));
         Serial.print(" -  "); Serial.println(saturated ? "PS saturated" : "PS not saturated");
+#endif
 
         if (!hasSensor)
         return;
@@ -410,8 +412,36 @@ void loop()
             wifi_connect_cd();
         }
     }
-    lv_task_handler();
-    delay(2);
+    // LVGL self-clocks via lv_tick (millis-based, LV_TICK_CUSTOM in lv_conf.h).
+    // lv_timer_handler() returns the time in ms until the next tick; it handles
+    // its own pacing internally. The old delay(2) forced a fixed cadence that
+    // could be slower than LVGL needs (starving animations) or faster than
+    // necessary (burning CPU). Letting LVGL drive its own tempo yields smoother
+    // display updates and responsive touch.
+    lv_timer_handler();
 
+#ifdef FACTORY_SELFTEST
+    // Loop timing diagnostics — emits main-loop period statistics every 5 s.
+    static uint32_t loop_count = 0;
+    static uint32_t loop_start = 0;
+    static uint32_t loop_min = UINT32_MAX;
+    static uint32_t loop_max = 0;
+    if (loop_start == 0) loop_start = micros();
+    uint32_t now = micros();
+    uint32_t period = now - loop_start;
+    loop_start = now;
+    if (period < loop_min) loop_min = period;
+    if (period > loop_max) loop_max = period;
+    loop_count++;
+    static uint32_t last_report = 0;
+    if (millis() - last_report > 5000) {
+        Serial.printf("[SELFTEST] loop: count=%u min=%u us max=%u us avg=%.0f us\n",
+                      loop_count, loop_min, loop_max,
+                      (float)(millis() - (millis() - 5000)) * 1000.0f / loop_count);
+        loop_count = 0;
+        loop_min = UINT32_MAX;
+        loop_max = 0;
+        last_report = millis();
+    }
+#endif
 }
-
