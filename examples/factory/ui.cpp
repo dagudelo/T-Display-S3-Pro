@@ -510,6 +510,7 @@ void ui_event_books(lv_event_t *e)
 {
     prompt_info("books cannot be used", UI_PROMPT_TIME);
 }
+static lv_obj_t *current_app_screen = NULL;
 
 void ui_event_contacts(lv_event_t *e)
 {
@@ -528,7 +529,7 @@ void ui_event_find_my(lv_event_t *e)
 
 void ui_event_clock(lv_event_t *e)
 {
-    prompt_info("clock cannot be used", UI_PROMPT_TIME);
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) current_app_screen = clock_app_create();
 }
 
 void ui_event_podcasts(lv_event_t *e)
@@ -553,7 +554,7 @@ void ui_event_stocks(lv_event_t *e)
 
 void ui_event_files(lv_event_t *e)
 {
-    prompt_info("files cannot be used", UI_PROMPT_TIME);
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) current_app_screen = files_app_create();
 }
 
 void ui_event_message(lv_event_t *e)
@@ -571,7 +572,13 @@ void ui_event_voice_memo(lv_event_t *e)
     prompt_info("voice memos cannot be used", UI_PROMPT_TIME);
 }
 
-static lv_obj_t *current_app_screen = NULL;
+void ui_event_mouse(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        current_app_screen = mouse_app_create();
+}
+
+
 static void ui_event_pacman(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -2905,6 +2912,7 @@ void ui_init(void)
     /* second page row 3 */
     backgBut_explain(ui_home2, NULL, (char *)"Tetris", ui_event_tetris, (void *)1, &app_tetris_img, -2, 270);
     backgBut_explain(ui_home2, NULL, (char *)"voice memo", ui_event_voice_memo, (void *)1, &app_voice_memos_img, 64, 270);
+    backgBut_explain(ui_home2, NULL, (char *)"mouse", ui_event_mouse, (void *)1, &app_tv_img, 130, 270);
 
     ui_footer = lv_obj_create(ui_home);
     lv_obj_set_width(ui_footer, 222);

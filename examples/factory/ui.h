@@ -13,6 +13,9 @@
 
 #include "app_pacman.h"
 #include "app_tetris.h"
+#include "app_clock.h"
+#include "app_files.h"
+#include "app_mouse.h"
 
 #define TARGET_FOLDER "/"
 #define UI_CAMERA_CANVAS 1
