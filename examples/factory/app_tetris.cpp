@@ -94,11 +94,11 @@ lv_obj_t *tetris_game_create(void)
         cells[r][c] = o;
     }
     restart();
-
-    int base = BY + ROWS*CS + 12;
+     
+    int base = BY + ROWS*CS + 12;  /* direction buttons row */
     struct { int x,y; const char *t; void (*cb)(void); } btns[] = {
         {12,base,LV_SYMBOL_LEFT,ml},{60,base,LV_SYMBOL_DOWN,md},
-        {108,base,LV_SYMBOL_RIGHT,mr},{60,base-42,LV_SYMBOL_REFRESH,rot},
+        {108,base,LV_SYMBOL_RIGHT,mr},{60,base+42,LV_SYMBOL_REFRESH,rot},
     };
     for(auto &b: btns){
         lv_obj_t *btn = lv_btn_create(game_scr);
