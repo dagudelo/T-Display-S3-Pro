@@ -412,13 +412,13 @@ void loop()
             wifi_connect_cd();
         }
     }
-    // LVGL self-clocks via lv_tick (millis-based, LV_TICK_CUSTOM in lv_conf.h).
-    // lv_timer_handler() returns the time in ms until the next tick; it handles
-    // its own pacing internally. The old delay(2) forced a fixed cadence that
-    // could be slower than LVGL needs (starving animations) or faster than
-    // necessary (burning CPU). Letting LVGL drive its own tempo yields smoother
-    // display updates and responsive touch.
-    lv_timer_handler();
+    // LVGL handles its own timing via lv_tick (millis-based).
+    // lv_timer_handler() returns ms until next tick — sleep that amount
+    // to yield CPU to WiFi callbacks, PMU I2C, and FreeRTOS scheduler.
+    uint32_t sleep_ms = lv_timer_handler();
+    if (sleep_ms > 20) sleep_ms = 20;
+    if (sleep_ms > 0) delay(sleep_ms);
+    else delay(1);  // always yield at least 1ms for background tasks
 
 #ifdef FACTORY_SELFTEST
     // Loop timing diagnostics — emits main-loop period statistics every 5 s.

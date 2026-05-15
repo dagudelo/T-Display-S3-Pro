@@ -2,418 +2,233 @@
  * @file    app_pacman.cpp
  * @brief   Pacman game for T-Display-S3-Pro (222x480 LVGL)
  *
- * Classic maze-chase arcade game. All rendering via LVGL objects.
- * Touch controls via on-screen D-pad buttons.
- *
- * Maze: 13×20 cells (each 16px) = 208×320, fits within 222×480.
- * Layout (from top): score bar (28px), maze (320px), D-pad (132px) = 480px.
+ * All game objects are children of the game screen — deleting the screen
+ * cleans up everything. D-pad uses LV_EVENT_PRESSING for auto-repeat.
  */
-
 #include "app_pacman.h"
 #include "lvgl.h"
 #include <stdlib.h>
 
-/* ── display geometry ───────────────────────────────────────────────── */
-#define SCR_W        222
-#define SCR_H        480
-#define CELL         16
-#define MAZE_COLS    13
-#define MAZE_ROWS    20
-#define MAZE_OX      ((SCR_W - MAZE_COLS * CELL) / 2)   /* left margin  */
-#define MAZE_OY      30                                  /* below score   */
+#define SCR_W  222
+#define SCR_H  480
+#define CELL   16
+#define COLS   13
+#define ROWS   20
+#define OX     ((SCR_W - COLS * CELL) / 2)
+#define OY     30
 
-/* ── classic Pacman maze (adapted for 13×20) ─────────────────────────── */
-/* Legend:  0 = empty, 1 = wall, 2 = pellet, 3 = power pellet, 4 = ghost house */
-static const uint8_t maze_init[MAZE_ROWS][MAZE_COLS] = {
-    {1,1,1,1,1,1,1,1,1,1,1,1,1},
-    {1,2,2,2,2,2,2,2,2,2,2,2,1},
-    {1,2,1,1,2,1,1,1,2,1,1,2,1},
-    {1,3,1,1,2,1,1,1,2,1,1,3,1},
-    {1,2,2,2,2,2,2,2,2,2,2,2,1},
-    {1,2,1,1,2,1,2,1,2,1,1,2,1},
-    {1,2,2,2,2,1,2,1,2,2,2,2,1},
-    {1,1,1,1,2,1,0,1,2,1,1,1,1},
-    {0,0,0,0,2,1,0,1,2,0,0,0,0},
-    {0,0,0,0,2,0,4,0,2,0,0,0,0},
-    {0,0,0,0,2,1,4,1,2,0,0,0,0},
-    {0,0,0,0,2,1,4,1,2,0,0,0,0},
-    {1,1,1,1,2,1,0,1,2,1,1,1,1},
-    {1,2,2,2,2,2,2,2,2,2,2,2,1},
-    {1,2,1,1,2,1,1,1,2,1,1,2,1},
-    {1,3,2,2,2,2,2,2,2,2,2,3,1},
-    {1,1,1,2,1,2,1,2,1,2,1,1,1},
-    {1,2,2,2,1,2,1,2,1,2,2,2,1},
-    {1,2,1,1,1,1,2,1,1,1,1,2,1},
-    {1,2,2,2,2,2,2,2,2,2,2,2,1},
+static const uint8_t maze_init[ROWS][COLS] = {
+    {1,1,1,1,1,1,1,1,1,1,1,1,1}, {1,2,2,2,2,2,2,2,2,2,2,2,1},
+    {1,2,1,1,2,1,1,1,2,1,1,2,1}, {1,3,1,1,2,1,1,1,2,1,1,3,1},
+    {1,2,2,2,2,2,2,2,2,2,2,2,1}, {1,2,1,1,2,1,2,1,2,1,1,2,1},
+    {1,2,2,2,2,1,2,1,2,2,2,2,1}, {1,1,1,1,2,1,0,1,2,1,1,1,1},
+    {0,0,0,0,2,1,0,1,2,0,0,0,0}, {0,0,0,0,2,0,4,0,2,0,0,0,0},
+    {0,0,0,0,2,1,4,1,2,0,0,0,0}, {0,0,0,0,2,1,4,1,2,0,0,0,0},
+    {1,1,1,1,2,1,0,1,2,1,1,1,1}, {1,2,2,2,2,2,2,2,2,2,2,2,1},
+    {1,2,1,1,2,1,1,1,2,1,1,2,1}, {1,3,2,2,2,2,2,2,2,2,2,3,1},
+    {1,1,1,2,1,2,1,2,1,2,1,1,1}, {1,2,2,2,1,2,1,2,1,2,2,2,1},
+    {1,2,1,1,1,1,2,1,1,1,1,2,1}, {1,2,2,2,2,2,2,2,2,2,2,2,1},
 };
 
-/* ── runtime maze state (mutable copy) ──────────────────────────────── */
-static uint8_t maze[MAZE_ROWS][MAZE_COLS];
-static int     pellets_remaining;
-static int     score;
-static int     lives;
+static uint8_t    maze[ROWS][COLS];
+static int        pellets_left, score, lives;
+static lv_obj_t  *game_scr = NULL;
+static lv_obj_t  *maze_obj[ROWS][COLS];
+static lv_obj_t  *pacman_obj, *ghost_obj[4];
+static lv_obj_t  *score_lbl, *lives_lbl;
+static lv_timer_t *gtimer, *htimer, *ptimer;
+static bool       power_mode;
+static uint32_t   power_end;
+static int        pacman_dir = 1, pacman_next = 1; /* 0=U 1=D 2=L 3=R */
+static int        ghost_dir[4] = {0,1,2,3};
+static int        pacman_cx, pacman_cy, ghost_cx[4], ghost_cy[4];
 
-/* ── game object handles ─────────────────────────────────────────────── */
-static lv_obj_t *maze_objs[MAZE_ROWS][MAZE_COLS];
-static lv_obj_t *pacman_obj;
-static lv_obj_t *ghost_obj[4];
-static lv_obj_t *score_label;
-static lv_obj_t *lives_label;
-
-/* ── directions ──────────────────────────────────────────────────────── */
-enum { DIR_UP = 0, DIR_DOWN, DIR_LEFT, DIR_RIGHT, DIR_NONE };
-static int pacman_dir   = DIR_RIGHT;
-static int pacman_next  = DIR_RIGHT;
-static int ghost_dir[4] = {DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT};
-
-/* ── positions (cell coordinates) ───────────────────────────────────── */
-static int pacman_cx, pacman_cy;
-static int ghost_cx[4], ghost_cy[4];
-
-/* ── timers ──────────────────────────────────────────────────────────── */
-static lv_timer_t *game_timer = NULL;
-static lv_timer_t *ghost_timer = NULL;
-static lv_timer_t *power_timer = NULL;
-static bool power_mode = false;
-static uint32_t power_end  = 0;
-
-/* ── forward declarations ────────────────────────────────────────────── */
-static void draw_maze(lv_obj_t *parent);
-static void spawn_pacman(void);
-static void spawn_ghosts(void);
-static void move_pacman(void);
-static bool can_move(int cx, int cy, int dir);
-static void eat_pellet(int cx, int cy);
-static void die(void);
-static void game_over(void);
-static void game_loop(lv_timer_t *t);
-static void ghost_ai(lv_timer_t *t);
-static void power_end_cb(lv_timer_t *t);
+static inline int cx(int c) { return OX + c*CELL; }
+static inline int cy(int r) { return OY + r*CELL; }
+static bool can_move(int x, int y, int d);
 static void restart_game(void);
-
-/* ── helper ──────────────────────────────────────────────────────────── */
-static inline int cell_x(int cx) { return MAZE_OX + cx * CELL; }
-static inline int cell_y(int cy) { return MAZE_OY + cy * CELL; }
-
-/* ═══════════════════════════════════════════════════════════════════════
- *  PUBLIC
- * ═══════════════════════════════════════════════════════════════════════ */
+static void refresh_cell(int r, int c);
 
 lv_obj_t *pacman_game_create(void)
 {
-    lv_obj_t *scr = lv_obj_create(NULL);
-    lv_obj_set_size(scr, SCR_W, SCR_H);
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
+    game_scr = lv_obj_create(NULL);
+    lv_obj_set_size(game_scr, SCR_W, SCR_H);
+    lv_obj_set_style_bg_color(game_scr, lv_color_black(), 0);
+    lv_obj_clear_flag(game_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── score bar ────────────────────────────────────────────────── */
-    score_label = lv_label_create(scr);
-    lv_label_set_text(score_label, "Score: 0");
-    lv_obj_set_style_text_color(score_label, lv_color_white(), 0);
-    lv_obj_align(score_label, LV_ALIGN_TOP_LEFT, 4, 4);
+    score_lbl = lv_label_create(game_scr);
+    lv_obj_set_style_text_color(score_lbl, lv_color_white(), 0);
+    lv_obj_align(score_lbl, LV_ALIGN_TOP_LEFT, 4, 4);
+    lives_lbl = lv_label_create(game_scr);
+    lv_obj_set_style_text_color(lives_lbl, lv_color_white(), 0);
+    lv_obj_align(lives_lbl, LV_ALIGN_TOP_RIGHT, -4, 4);
 
-    lives_label = lv_label_create(scr);
-    lv_label_set_text(lives_label, "Lives: 3");
-    lv_obj_set_style_text_color(lives_label, lv_color_white(), 0);
-    lv_obj_align(lives_label, LV_ALIGN_TOP_RIGHT, -4, 4);
-
-    /* ── back button ──────────────────────────────────────────────── */
-    lv_obj_t *btn_back = lv_btn_create(scr);
-    lv_obj_set_size(btn_back, 50, 24);
-    lv_obj_align(btn_back, LV_ALIGN_TOP_LEFT, 60, 2);
-    lv_obj_t *lbl_back = lv_label_create(btn_back);
-    lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " Back");
-    lv_obj_center(lbl_back);
-    lv_obj_add_event_cb(btn_back, [](lv_event_t *e) {
-        lv_obj_t *scr = lv_obj_get_parent(lv_event_get_target(e));
-        if (game_timer) { lv_timer_del(game_timer); game_timer = NULL; }
-        if (ghost_timer) { lv_timer_del(ghost_timer); ghost_timer = NULL; }
-        if (power_timer) { lv_timer_del(power_timer); power_timer = NULL; }
-        lv_obj_del(scr);
+    lv_obj_t *bb = lv_btn_create(game_scr);
+    lv_obj_set_size(bb, 50, 24); lv_obj_align(bb, LV_ALIGN_TOP_LEFT, 60, 2);
+    lv_obj_t *bl = lv_label_create(bb);
+    lv_label_set_text(bl, LV_SYMBOL_LEFT " Back"); lv_obj_center(bl);
+    lv_obj_add_event_cb(bb, [](lv_event_t*) {
+        if(gtimer){lv_timer_del(gtimer);gtimer=NULL;}
+        if(htimer){lv_timer_del(htimer);htimer=NULL;}
+        if(ptimer){lv_timer_del(ptimer);ptimer=NULL;}
+        lv_obj_del(game_scr);
     }, LV_EVENT_CLICKED, NULL);
 
-    /* ── draw maze and start game ─────────────────────────────────── */
-    draw_maze(scr);
+    /* draw maze */
+    for(int r=0;r<ROWS;r++) for(int c=0;c<COLS;c++){
+        uint8_t cell = maze_init[r][c];
+        if(cell==0||cell==4){maze_obj[r][c]=NULL;continue;}
+        lv_obj_t *o = lv_obj_create(game_scr);
+        lv_obj_set_pos(o, cx(c), cy(r));
+        lv_obj_set_scrollbar_mode(o, LV_SCROLLBAR_MODE_OFF);
+        if(cell==1){
+            lv_obj_set_size(o, CELL-1, CELL-1);
+            lv_obj_set_style_bg_color(o, lv_color_hex(0x2121DE), 0);
+            lv_obj_set_style_border_width(o, 0, 0);
+        }else if(cell==2){
+            lv_obj_set_size(o, 4, 4); lv_obj_set_pos(o, cx(c)+6, cy(r)+6);
+            lv_obj_set_style_bg_color(o, lv_color_hex(0xFFB8AE), 0);
+            lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+        }else if(cell==3){
+            lv_obj_set_size(o, 10,10); lv_obj_set_pos(o, cx(c)+3, cy(r)+3);
+            lv_obj_set_style_bg_color(o, lv_color_hex(0xFFB8AE), 0);
+            lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
+        }
+        maze_obj[r][c] = o;
+    }
     restart_game();
 
-    /* ── D-pad controls (below maze) ──────────────────────────────── */
-    int dpad_base = MAZE_OY + MAZE_ROWS * CELL + 16;
-
-    auto make_btn = [&](int x, int y, int w, int h, const char *txt, int dir) {
-        lv_obj_t *b = lv_btn_create(scr);
-        lv_obj_set_size(b, w, h);
-        lv_obj_set_pos(b, x, y);
-        lv_obj_set_style_radius(b, 8, 0);
-        lv_obj_t *l = lv_label_create(b);
-        lv_label_set_text(l, txt);
-        lv_obj_center(l);
-        lv_obj_add_event_cb(b, [](lv_event_t *e) {
+    /* D-pad */
+    int base = OY + ROWS*CELL + 16;
+    struct { int x,y; const char *t; int d; } btns[] = {
+        {SCR_W/2-28, base-60, LV_SYMBOL_UP,    0},
+        {SCR_W/2-28, base+4,  LV_SYMBOL_DOWN,  1},
+        {SCR_W/2-84, base-28, LV_SYMBOL_LEFT,  2},
+        {SCR_W/2+28, base-28, LV_SYMBOL_RIGHT, 3},
+    };
+    for(auto &b: btns){
+        lv_obj_t *btn = lv_btn_create(game_scr);
+        lv_obj_set_size(btn, 56, 56); lv_obj_set_pos(btn, b.x, b.y);
+        lv_obj_set_style_radius(btn, 8, 0);
+        lv_obj_t *l = lv_label_create(btn);
+        lv_label_set_text(l, b.t); lv_obj_center(l);
+        lv_obj_add_event_cb(btn, [](lv_event_t *e) {
             int d = (int)(intptr_t)lv_event_get_user_data(e);
             pacman_next = d;
-        }, LV_EVENT_CLICKED, (void *)(intptr_t)dir);
-    };
-
-    make_btn(SCR_W/2 - 28, dpad_base - 60, 56, 56, LV_SYMBOL_UP,    DIR_UP);
-    make_btn(SCR_W/2 - 28, dpad_base + 04, 56, 56, LV_SYMBOL_DOWN,  DIR_DOWN);
-    make_btn(SCR_W/2 - 84, dpad_base - 28, 56, 56, LV_SYMBOL_LEFT,  DIR_LEFT);
-    make_btn(SCR_W/2 + 28, dpad_base - 28, 56, 56, LV_SYMBOL_RIGHT, DIR_RIGHT);
-
-    lv_scr_load(scr);
-    return scr;
+            if(pacman_dir!=d && can_move(pacman_cx,pacman_cy,d)) pacman_dir=d;
+        }, LV_EVENT_PRESSING, (void*)(intptr_t)b.d);
+    }
+    lv_scr_load(game_scr);
+    return game_scr;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════
- *  INTERNAL
- * ═══════════════════════════════════════════════════════════════════════ */
 
 static void restart_game(void)
 {
-    pellets_remaining = 0;
-    for (int r = 0; r < MAZE_ROWS; r++)
-        for (int c = 0; c < MAZE_COLS; c++) {
-            maze[r][c] = maze_init[r][c];
-            if (maze[r][c] == 2 || maze[r][c] == 3) pellets_remaining++;
-        }
-    score  = 0;
-    lives  = 3;
-    power_mode = false;
-
-    lv_label_set_text_fmt(score_label, "Score: %d", score);
-    lv_label_set_text_fmt(lives_label, "Lives: %d", lives);
-
-    spawn_pacman();
-    spawn_ghosts();
-
-    if (game_timer) lv_timer_del(game_timer);
-    game_timer = lv_timer_create(game_loop, 200, NULL);
-
-    if (ghost_timer) lv_timer_del(ghost_timer);
-    ghost_timer = lv_timer_create(ghost_ai, 300, NULL);
-}
-
-static void draw_maze(lv_obj_t *parent)
-{
-    for (int r = 0; r < MAZE_ROWS; r++) {
-        for (int c = 0; c < MAZE_COLS; c++) {
-            uint8_t cell = maze_init[r][c];
-            if (cell == 0 || cell == 4) { maze_objs[r][c] = NULL; continue; }
-
-            lv_obj_t *obj = lv_obj_create(parent);
-            lv_obj_set_size(obj, CELL - 1, CELL - 1);
-            lv_obj_set_pos(obj, cell_x(c), cell_y(r));
-            lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
-
-            if (cell == 1) {
-                lv_obj_set_style_bg_color(obj, lv_color_hex(0x2121DE), 0);
-                lv_obj_set_style_border_width(obj, 0, 0);
-            } else if (cell == 2) {
-                lv_obj_set_style_bg_color(obj, lv_color_hex(0xFFB8AE), 0);
-                lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
-                lv_obj_set_size(obj, 4, 4);
-                lv_obj_set_pos(obj, cell_x(c) + 6, cell_y(r) + 6);
-            } else if (cell == 3) {
-                lv_obj_set_style_bg_color(obj, lv_color_hex(0xFFB8AE), 0);
-                lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE, 0);
-                lv_obj_set_size(obj, 10, 10);
-                lv_obj_set_pos(obj, cell_x(c) + 3, cell_y(r) + 3);
-            }
-            maze_objs[r][c] = obj;
-        }
+    pellets_left=0;
+    for(int r=0;r<ROWS;r++) for(int c=0;c<COLS;c++){
+        maze[r][c]=maze_init[r][c];
+        if(maze[r][c]==2||maze[r][c]==3) pellets_left++;
     }
-}
+    score=0; lives=3; power_mode=false;
+    lv_label_set_text_fmt(score_lbl,"Score: %d",score);
+    lv_label_set_text_fmt(lives_lbl,"Lives: %d",lives);
 
-static void refresh_cell(int r, int c)
-{
-    if (maze_objs[r][c]) {
-        lv_obj_del(maze_objs[r][c]);
-        maze_objs[r][c] = NULL;
-    }
-}
-
-static void spawn_pacman(void)
-{
-    pacman_cx = 1;  pacman_cy = MAZE_ROWS - 2;
-    pacman_dir  = DIR_RIGHT;
-    pacman_next = DIR_RIGHT;
-
-    if (pacman_obj) lv_obj_del(pacman_obj);
-    pacman_obj = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(pacman_obj, CELL - 2, CELL - 2);
+    pacman_cx=1; pacman_cy=ROWS-2; pacman_dir=3; pacman_next=3;
+    if(pacman_obj) lv_obj_del(pacman_obj);
+    pacman_obj = lv_obj_create(game_scr);
+    lv_obj_set_size(pacman_obj, CELL-2, CELL-2);
     lv_obj_set_style_bg_color(pacman_obj, lv_color_hex(0xFFFF00), 0);
     lv_obj_set_style_radius(pacman_obj, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(pacman_obj, 0, 0);
-    lv_obj_set_pos(pacman_obj, cell_x(pacman_cx) + 1, cell_y(pacman_cy) + 1);
-}
+    lv_obj_set_pos(pacman_obj, cx(1)+1, cy(ROWS-2)+1);
 
-static void spawn_ghosts(void)
-{
-    static const lv_color_t gcolors[4] = {
-        LV_COLOR_MAKE(0xFF, 0x00, 0x00),
-        LV_COLOR_MAKE(0xFF, 0xB8, 0xFF),
-        LV_COLOR_MAKE(0x00, 0xFF, 0xFF),
-        LV_COLOR_MAKE(0xFF, 0xB8, 0x52),
+    static const lv_color_t gc[4] = {
+        LV_COLOR_MAKE(0xFF,0x00,0x00), LV_COLOR_MAKE(0xFF,0xB8,0xFF),
+        LV_COLOR_MAKE(0x00,0xFF,0xFF), LV_COLOR_MAKE(0xFF,0xB8,0x52),
     };
-    int sx[4] = {5,7,6,6};
-    int sy[4] = {9,9,10,11};
-    for (int i = 0; i < 4; i++) {
-        ghost_cx[i] = sx[i];  ghost_cy[i] = sy[i];
-        ghost_dir[i] = DIR_UP;
-        if (ghost_obj[i]) lv_obj_del(ghost_obj[i]);
-        ghost_obj[i] = lv_obj_create(lv_scr_act());
-        lv_obj_set_size(ghost_obj[i], CELL - 2, CELL - 2);
-        lv_obj_set_style_bg_color(ghost_obj[i], gcolors[i], 0);
+    int sx[4]={5,7,6,6}, sy[4]={9,9,10,11};
+    for(int i=0;i<4;i++){
+        ghost_cx[i]=sx[i]; ghost_cy[i]=sy[i]; ghost_dir[i]=0;
+        if(ghost_obj[i]) lv_obj_del(ghost_obj[i]);
+        ghost_obj[i] = lv_obj_create(game_scr);
+        lv_obj_set_size(ghost_obj[i], CELL-2, CELL-2);
+        lv_obj_set_style_bg_color(ghost_obj[i], gc[i], 0);
         lv_obj_set_style_radius(ghost_obj[i], LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_border_width(ghost_obj[i], 0, 0);
-        lv_obj_set_pos(ghost_obj[i], cell_x(ghost_cx[i])+1, cell_y(ghost_cy[i])+1);
+        lv_obj_set_pos(ghost_obj[i], cx(sx[i])+1, cy(sy[i])+1);
     }
-}
-
-static bool can_move(int cx, int cy, int dir)
-{
-    int nx = cx, ny = cy;
-    if (dir == DIR_UP)    ny--;
-    if (dir == DIR_DOWN)  ny++;
-    if (dir == DIR_LEFT)  nx--;
-    if (dir == DIR_RIGHT) nx++;
-    if (nx < 0)          nx = MAZE_COLS - 1;
-    if (nx >= MAZE_COLS) nx = 0;
-    if (ny < 0 || ny >= MAZE_ROWS) return false;
-    return maze[ny][nx] != 1;
-}
-
-static void eat_pellet(int cx, int cy)
-{
-    if (maze[cy][cx] == 2) {
-        maze[cy][cx] = 0;
-        score += 10;
-        pellets_remaining--;
-        refresh_cell(cy, cx);
-    } else if (maze[cy][cx] == 3) {
-        maze[cy][cx] = 0;
-        score += 50;
-        pellets_remaining--;
-        refresh_cell(cy, cx);
-        power_mode = true;
-        power_end  = lv_tick_get() + 7000;
-        if (power_timer) lv_timer_del(power_timer);
-        power_timer = lv_timer_create(power_end_cb, 100, NULL);
-    }
-    lv_label_set_text_fmt(score_label, "Score: %d", score);
-    if (pellets_remaining <= 0) restart_game();
-}
-
-static void die(void)
-{
-    lives--;
-    lv_label_set_text_fmt(lives_label, "Lives: %d", lives);
-    if (lives <= 0) { game_over(); return; }
-    if (pacman_obj) { lv_obj_del(pacman_obj); pacman_obj = NULL; }
-    for (int i = 0; i < 4; i++)
-        if (ghost_obj[i]) { lv_obj_del(ghost_obj[i]); ghost_obj[i] = NULL; }
-    spawn_pacman();
-    spawn_ghosts();
-    power_mode = false;
-    if (power_timer) { lv_timer_del(power_timer); power_timer = NULL; }
-}
-
-static void game_over(void)
-{
-    if (game_timer)  { lv_timer_del(game_timer);  game_timer  = NULL; }
-    if (ghost_timer) { lv_timer_del(ghost_timer); ghost_timer = NULL; }
-    if (power_timer) { lv_timer_del(power_timer); power_timer = NULL; }
-    lv_obj_t *mbox = lv_msgbox_create(NULL, "Game Over",
-        "Tap anywhere to restart", NULL, true);
-    lv_obj_center(mbox);
-    lv_obj_add_event_cb(mbox, [](lv_event_t *e) {
-        lv_obj_del(lv_event_get_current_target(e));
-        restart_game();
-    }, LV_EVENT_CLICKED, NULL);
-}
-
-static void game_loop(lv_timer_t *t)
-{
-    (void)t;
-    if (pacman_next != pacman_dir && can_move(pacman_cx, pacman_cy, pacman_next))
-        pacman_dir = pacman_next;
-    if (!can_move(pacman_cx, pacman_cy, pacman_dir)) return;
-    move_pacman();
-    for (int i = 0; i < 4; i++) {
-        if (ghost_cx[i] == pacman_cx && ghost_cy[i] == pacman_cy) {
-            if (power_mode) {
-                score += 200;
-                lv_label_set_text_fmt(score_label, "Score: %d", score);
-                ghost_cx[i] = 6; ghost_cy[i] = 10;
-                lv_obj_set_pos(ghost_obj[i], cell_x(6)+1, cell_y(10)+1);
-            } else { die(); return; }
+    if(gtimer) lv_timer_del(gtimer); gtimer=lv_timer_create([](lv_timer_t*){
+        if(pacman_next!=pacman_dir && can_move(pacman_cx,pacman_cy,pacman_next))
+            pacman_dir=pacman_next;
+        if(!can_move(pacman_cx,pacman_cy,pacman_dir)) return;
+        int nx=pacman_cx, ny=pacman_cy;
+        if(pacman_dir==0)ny--; if(pacman_dir==1)ny++; if(pacman_dir==2)nx--; if(pacman_dir==3)nx++;
+        if(nx<0)nx=COLS-1; if(nx>=COLS)nx=0;
+        if(ny<0||ny>=ROWS) return;
+        pacman_cx=nx; pacman_cy=ny;
+        lv_obj_set_pos(pacman_obj, cx(nx)+1, cy(ny)+1);
+        if(maze[ny][nx]==2){maze[ny][nx]=0;score+=10;pellets_left--;refresh_cell(ny,nx);}
+        else if(maze[ny][nx]==3){maze[ny][nx]=0;score+=50;pellets_left--;refresh_cell(ny,nx);
+            power_mode=true; power_end=lv_tick_get()+7000;
+            if(ptimer)lv_timer_del(ptimer);ptimer=lv_timer_create([](lv_timer_t*t){
+                if(lv_tick_get()>=power_end){power_mode=false;lv_timer_del(t);ptimer=NULL;}
+            },100,NULL);
         }
-    }
-}
-
-static void move_pacman(void)
-{
-    int nx = pacman_cx, ny = pacman_cy;
-    if (pacman_dir == DIR_UP)    ny--;
-    if (pacman_dir == DIR_DOWN)  ny++;
-    if (pacman_dir == DIR_LEFT)  nx--;
-    if (pacman_dir == DIR_RIGHT) nx++;
-    if (nx < 0) nx = MAZE_COLS - 1;
-    if (nx >= MAZE_COLS) nx = 0;
-    if (ny < 0 || ny >= MAZE_ROWS) return;
-    pacman_cx = nx; pacman_cy = ny;
-    lv_obj_set_pos(pacman_obj, cell_x(pacman_cx)+1, cell_y(pacman_cy)+1);
-    eat_pellet(pacman_cx, pacman_cy);
-}
-
-static void ghost_ai(lv_timer_t *t)
-{
-    (void)t;
-    for (int i = 0; i < 4; i++) {
-        int best_dir = ghost_dir[i];
-        int best_dist = 999;
-        if ((lv_tick_get() / 1000) % 7 == 0) {
-            int dirs[4] = {DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT};
-            for (int attempt = 0; attempt < 8; attempt++) {
-                int d = dirs[rand() % 4];
-                if (can_move(ghost_cx[i], ghost_cy[i], d)) { best_dir = d; break; }
-            }
-        } else {
-            int dirs[4] = {DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT};
-            for (int j = 0; j < 4; j++) {
-                int d = dirs[j];
-                if (!can_move(ghost_cx[i], ghost_cy[i], d)) continue;
-                int nx = ghost_cx[i], ny = ghost_cy[i];
-                if (d == DIR_UP) ny--; if (d == DIR_DOWN) ny++;
-                if (d == DIR_LEFT) nx--; if (d == DIR_RIGHT) nx++;
-                if (nx < 0) nx = MAZE_COLS - 1; if (nx >= MAZE_COLS) nx = 0;
-                int dist = abs(nx - pacman_cx) + abs(ny - pacman_cy);
-                if (dist < best_dist) { best_dist = dist; best_dir = d; }
+        lv_label_set_text_fmt(score_lbl,"Score: %d",score);
+        if(pellets_left<=0) restart_game();
+        for(int i=0;i<4;i++) if(ghost_cx[i]==pacman_cx && ghost_cy[i]==pacman_cy){
+            if(power_mode){score+=200;lv_label_set_text_fmt(score_lbl,"Score: %d",score);
+                ghost_cx[i]=6;ghost_cy[i]=10;lv_obj_set_pos(ghost_obj[i],cx(6)+1,cy(10)+1);}
+            else { lives--; lv_label_set_text_fmt(lives_lbl,"Lives: %d",lives);
+                if(lives<=0){ if(gtimer)lv_timer_del(gtimer); if(htimer)lv_timer_del(htimer);
+                    lv_obj_t*m=lv_msgbox_create(NULL,"Game Over","Tap to restart",NULL,true);
+                    lv_obj_center(m); lv_obj_add_event_cb(m,[](lv_event_t*e){
+                        lv_obj_del(lv_event_get_current_target(e));restart_game();
+                    },LV_EVENT_CLICKED,NULL); return; }
+                lv_obj_del(pacman_obj); pacman_obj=NULL;
+                for(int j=0;j<4;j++){lv_obj_del(ghost_obj[j]);ghost_obj[j]=NULL;}
+                restart_game(); return;
             }
         }
-        if (!can_move(ghost_cx[i], ghost_cy[i], best_dir)) {
-            int dirs[4] = {DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT};
-            bool found = false;
-            for (int j = 0; j < 4; j++)
-                if (can_move(ghost_cx[i], ghost_cy[i], dirs[j]))
-                    { best_dir = dirs[j]; found = true; break; }
-            if (!found) continue;
+    },200,NULL);
+    if(htimer) lv_timer_del(htimer); htimer=lv_timer_create([](lv_timer_t*){
+        for(int i=0;i<4;i++){
+            int best_dir=ghost_dir[i], best_dist=999;
+            if((lv_tick_get()/1000)%7==0){
+                int ds[4]={0,1,2,3};
+                for(int a=0;a<8;a++){int d=ds[rand()%4];if(can_move(ghost_cx[i],ghost_cy[i],d)){best_dir=d;break;}}
+            }else{
+                int ds[4]={0,1,2,3};
+                for(int j=0;j<4;j++){int d=ds[j];if(!can_move(ghost_cx[i],ghost_cy[i],d))continue;
+                    int nx=ghost_cx[i],ny=ghost_cy[i];
+                    if(d==0)ny--;if(d==1)ny++;if(d==2)nx--;if(d==3)nx++;
+                    if(nx<0)nx=COLS-1;if(nx>=COLS)nx=0;
+                    int dist=abs(nx-pacman_cx)+abs(ny-pacman_cy);
+                    if(dist<best_dist){best_dist=dist;best_dir=d;}
+                }
+            }
+            if(!can_move(ghost_cx[i],ghost_cy[i],best_dir)){
+                int ds[4]={0,1,2,3};bool ok=false;
+                for(int j=0;j<4;j++)if(can_move(ghost_cx[i],ghost_cy[i],ds[j])){best_dir=ds[j];ok=true;break;}
+                if(!ok) continue;
+            }
+            int nx=ghost_cx[i],ny=ghost_cy[i];
+            if(best_dir==0)ny--;if(best_dir==1)ny++;if(best_dir==2)nx--;if(best_dir==3)nx++;
+            if(nx<0)nx=COLS-1;if(nx>=COLS)nx=0;
+            ghost_cx[i]=nx;ghost_cy[i]=ny;ghost_dir[i]=best_dir;
+            lv_obj_set_pos(ghost_obj[i],cx(nx)+1,cy(ny)+1);
         }
-        int nx = ghost_cx[i], ny = ghost_cy[i];
-        if (best_dir == DIR_UP) ny--; if (best_dir == DIR_DOWN) ny++;
-        if (best_dir == DIR_LEFT) nx--; if (best_dir == DIR_RIGHT) nx++;
-        if (nx < 0) nx = MAZE_COLS - 1; if (nx >= MAZE_COLS) nx = 0;
-        ghost_cx[i] = nx; ghost_cy[i] = ny;
-        ghost_dir[i] = best_dir;
-        lv_obj_set_pos(ghost_obj[i], cell_x(nx)+1, cell_y(ny)+1);
-    }
+    },300,NULL);
 }
 
-static void power_end_cb(lv_timer_t *t)
-{
-    if (lv_tick_get() >= power_end) {
-        power_mode = false;
-        lv_timer_del(t);
-        power_timer = NULL;
-    }
+static bool can_move(int x, int y, int d){
+    int nx=x,ny=y;
+    if(d==0)ny--;if(d==1)ny++;if(d==2)nx--;if(d==3)nx++;
+    if(nx<0)nx=COLS-1;if(nx>=COLS)nx=0;
+    if(ny<0||ny>=ROWS) return false;
+    return maze[ny][nx]!=1;
+}
+
+static void refresh_cell(int r, int c){
+    if(maze_obj[r][c]){lv_obj_del(maze_obj[r][c]);maze_obj[r][c]=NULL;}
 }
