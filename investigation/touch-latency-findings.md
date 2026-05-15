@@ -109,3 +109,21 @@ pre-built firmware. In `platformio.ini`:
 platform = espressif32@6.1.0   # or the version LilyGo used
 ```
 Then rebuild with `pio run -e factory -t upload`.
+
+## ⚠️ IRQ-Gating Reverted — 2026-05-15
+
+### Problem
+
+The CST226SE clears its IRQ pin after every I2C read, even while the
+finger is still pressed. With IRQ-gated reads, the first touch event
+is detected correctly (IRQ LOW → read → PRESS), but on the next LVGL
+tick the IRQ is already HIGH again, causing the callback to return
+LV_INDEV_STATE_REL prematurely. Result: touches appear as single-tap
+flickers instead of sustained presses.
+
+### Fix
+
+Removed the `digitalRead(BOARD_TOUCH_IRQ)` gate from `lv_touchpad_read()`.
+The 400 kHz I2C speed alone provides the 4× latency reduction (3.5 ms →
+0.9 ms per read). At LV_INDEV_DEF_READ_PERIOD=30 ms, the touch read now
+consumes ~3% of the tick budget instead of ~12%.

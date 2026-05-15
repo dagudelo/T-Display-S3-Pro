@@ -48,14 +48,8 @@ static void lv_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data
 {
     static int16_t x[5], y[5];
 
-    // IRQ-gated read: CST226SE drives IRQ LOW when data is available.
-    // Skip the blocking I2C transaction when the touch controller has nothing to report.
-    if (digitalRead(BOARD_TOUCH_IRQ) == HIGH) {
-        data->state = LV_INDEV_STATE_REL;
-        return;
-    }
-
     uint8_t touched = touch.getPoint(x, y, touch.getSupportTouchPoint());
+
     if (touched) {
         data->state = LV_INDEV_STATE_PR;
         data->point.x = x[0];
@@ -198,7 +192,6 @@ void lv_helper(uint8_t r)
 //
 // These blocks are inert unless the corresponding macro is defined at
 // compile time — zero overhead in production builds.
-
 
 
 
