@@ -55,6 +55,9 @@ LV_IMG_DECLARE(app_stocks_img);
 LV_IMG_DECLARE(app_voice_memos_img);
 LV_IMG_DECLARE(app_podcasts_img);
 
+LV_IMG_DECLARE(app_pacman_img);
+LV_IMG_DECLARE(app_tetris_img);
+
 LV_IMG_DECLARE(ui_img_1103371374);
 LV_IMG_DECLARE(ui_img_previous_png);
 LV_IMG_DECLARE(ui_img_play_png);
@@ -560,6 +563,22 @@ void ui_event_message(lv_event_t *e)
 void ui_event_phone(lv_event_t *e)
 {
     prompt_info("phone cannot be used", UI_PROMPT_TIME);
+}
+
+static void ui_event_pacman(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_PRESSED) {
+        pacman_game_create();
+    }
+}
+
+static void ui_event_tetris(lv_event_t *e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+    if (event_code == LV_EVENT_PRESSED) {
+        tetris_game_create();
+    }
 }
 
 static void ui_photos_img_src_event(lv_event_t *e)
@@ -2871,8 +2890,11 @@ void ui_init(void)
     backgBut_explain(ui_home2, NULL, (char *)"shortcuts", ui_event_shortcuts, (void *)1, &app_shortcuts_img, 130, 90);
     backgBut_explain(ui_home2, NULL, (char *)"stocks", ui_event_stocks, (void *)1, &app_stocks_img, -2, 180);
     backgBut_explain(ui_home2, NULL, (char *)"files", ui_event_files, (void *)1, &app_files_img, 64, 180);
-    //backgBut_explain(ui_home2, NULL, (char*)"voice memos", NULL, (void*)1, &app_voice_memos_img, 64, 180);
-    //backgBut_explain(ui_home2, NULL, (char*)"apple tv", NULL, (void*)1, &app_tv_img, 64, 0);
+    backgBut_explain(ui_home2, NULL, (char *)"Pacman", ui_event_pacman, (void *)1, &app_pacman_img, 130, 180);
+
+    /* second page row 3 */
+    backgBut_explain(ui_home2, NULL, (char *)"Tetris", ui_event_tetris, (void *)1, &app_tetris_img, -2, 270);
+    backgBut_explain(ui_home2, NULL, (char *)"voice memo", ui_event_files, (void *)1, &app_voice_memos_img, 64, 270);
 
     ui_footer = lv_obj_create(ui_home);
     lv_obj_set_width(ui_footer, 222);
@@ -3310,4 +3332,3 @@ void ui_init(void)
 
     lv_timer_create(updateTime, 1000, NULL);
 }
-

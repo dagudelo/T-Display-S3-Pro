@@ -9,6 +9,10 @@
 #include "ESP32_OV5640_AF.h"
 #include "esp32-hal-log.h"
 #include "sd_card.h"
+#include <WiFi.h>
+
+#include "app_pacman.h"
+#include "app_tetris.h"
 
 #define TARGET_FOLDER "/"
 #define UI_CAMERA_CANVAS 1

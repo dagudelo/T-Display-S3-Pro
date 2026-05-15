@@ -74,3 +74,38 @@ Define these macros at build time to activate verification:
 - `SensorLib.h` — `SENSORLIB_I2C_MASTER_SEEED = 400000` (ESP-IDF path only, not Arduino)
 - `utilities.h` — pin definitions: `BOARD_TOUCH_IRQ=7`, `BOARD_TOUCH_RST=13`
 - `lv_conf.h` — `LV_INDEV_DEF_READ_PERIOD=30`, `LV_DISP_DEF_REFR_PERIOD=16`
+
+## ⚠️ Build Toolchain Issue — Flash Attempt 2026-05-14
+
+### Problem
+
+Building with `platform = espressif32@6.3.0` (Arduino ESP32 2.0.9) produces
+firmware that crashes during early boot — no app output beyond the ROM
+bootloader, regardless of whether our fixes are applied or the original
+unmodified source is used. The crash happens before `psramInit()`.
+
+### Confirmed
+
+- **Pre-built `firmware/v1.1/Factory_V1.1.bin`**: flashes and boots correctly.
+  Logs show PSRAM init, camera detection (GC0308), touch detection
+  (CST226SE), SD card mount. Full boot log captured.
+- **Our build (both patched and original source)**: only ROM bootloader output.
+  No PSRAM init message, no app output. Firmware binary is ~2.5 MB (same size
+  range as pre-built).
+
+### Likely Cause
+
+The ESP32-S3R8 has 8 MB Octal PSRAM (`qio_opi`). The Arduino ESP32 2.0.9 SDK
+configuration for `esp32s3` variant may not correctly initialize Octal PSRAM
+on this specific board revision, causing an early crash in the second-stage
+bootloader or `initArduino()`. The pre-built firmware was compiled with an
+older toolchain that handles this correctly.
+
+### Recommended Fix
+
+Downgrade the PlatformIO platform to match the toolchain that built the
+pre-built firmware. In `platformio.ini`:
+```
+platform = espressif32@6.1.0   # or the version LilyGo used
+```
+Then rebuild with `pio run -e factory -t upload`.
