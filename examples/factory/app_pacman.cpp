@@ -1,3 +1,4 @@
+
 /**
  * @file    app_pacman.cpp
  * @brief   Pacman game for T-Display-S3-Pro (222x480 LVGL)
@@ -17,7 +18,16 @@
 #define OX     ((SCR_W - COLS * CELL) / 2)
 #define OY     30
 
-static const uint8_t maze_init[ROWS][COLS] = {
+#include <string.h>
+
+/* non-const maze — call set_maze() before create to customize */
+uint8_t maze_init[ROWS][COLS];
+
+void set_maze(const uint8_t m[ROWS][COLS]) {
+    memcpy(maze_init, m, sizeof(maze_init));
+}
+
+static const uint8_t default_maze[ROWS][COLS] = {
     {1,1,1,1,1,1,1,1,1,1,1,1,1}, {1,2,2,2,2,2,2,2,2,2,2,2,1},
     {1,2,1,1,2,1,1,1,2,1,1,2,1}, {1,3,1,1,2,1,1,1,2,1,1,3,1},
     {1,2,2,2,2,2,2,2,2,2,2,2,1}, {1,2,1,1,2,1,2,1,2,1,1,2,1},
@@ -29,6 +39,14 @@ static const uint8_t maze_init[ROWS][COLS] = {
     {1,1,1,2,1,2,1,2,1,2,1,1,1}, {1,2,2,2,1,2,1,2,1,2,2,2,1},
     {1,2,1,1,1,1,2,1,1,1,1,2,1}, {1,2,2,2,2,2,2,2,2,2,2,2,1},
 };
+
+static bool maze_loaded = false;
+static void ensure_maze(void) {
+    if (!maze_loaded) {
+        memcpy(maze_init, default_maze, sizeof(maze_init));
+        maze_loaded = true;
+    }
+}
 
 static uint8_t    maze[ROWS][COLS];
 static int        pellets_left, score, lives;
@@ -51,6 +69,7 @@ static void refresh_cell(int r, int c);
 
 lv_obj_t *pacman_game_create(void)
 {
+    ensure_maze();
     game_scr = lv_obj_create(NULL);
     lv_obj_set_size(game_scr, SCR_W, SCR_H);
     lv_obj_set_style_bg_color(game_scr, lv_color_black(), 0);
@@ -124,6 +143,7 @@ lv_obj_t *pacman_game_create(void)
 
 static void restart_game(void)
 {
+    ensure_maze();
     pellets_left=0;
     for(int r=0;r<ROWS;r++) for(int c=0;c<COLS;c++){
         maze[r][c]=maze_init[r][c];

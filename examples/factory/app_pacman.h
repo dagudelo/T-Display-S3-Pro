@@ -13,6 +13,8 @@
 extern "C" {
 #endif
 
+void set_maze(const uint8_t maze[20][13]);
+
 /**
  * @brief  Launch the Pacman game on a dedicated LVGL screen.
  * @return Pointer to the game screen (lv_scr_act after call).
