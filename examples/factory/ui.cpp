@@ -122,6 +122,7 @@ void style_init()
     lv_style_set_radius(&style_frameless, 0);
     lv_style_set_border_width(&style_frameless, 0);
     lv_style_set_bg_color(&style_frameless, lv_color_white());
+
 }
 
 lv_obj_t *ui_home = NULL;
@@ -336,7 +337,7 @@ static void backgBut_explain(lv_obj_t *parent, lv_obj_t **obj, char *showData, l
                           LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM |
                           LV_OBJ_FLAG_SCROLL_CHAIN);
         if (event_cb != NULL) {
-            lv_obj_add_event_cb(img_obj, event_cb, LV_EVENT_PRESSED, (void *)1);
+            lv_obj_add_event_cb(img_obj, event_cb, LV_EVENT_CLICKED, (void *)1);
         }
     }
 
@@ -565,19 +566,18 @@ void ui_event_phone(lv_event_t *e)
     prompt_info("phone cannot be used", UI_PROMPT_TIME);
 }
 
+static lv_obj_t *current_app_screen = NULL;
 static void ui_event_pacman(lv_event_t *e)
 {
-    lv_event_code_t event_code = lv_event_get_code(e);
-    if (event_code == LV_EVENT_PRESSED) {
-        pacman_game_create();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        current_app_screen = pacman_game_create();
     }
 }
 
 static void ui_event_tetris(lv_event_t *e)
 {
-    lv_event_code_t event_code = lv_event_get_code(e);
-    if (event_code == LV_EVENT_PRESSED) {
-        tetris_game_create();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        current_app_screen = tetris_game_create();
     }
 }
 
@@ -695,7 +695,7 @@ static void ui_event_photos(lv_event_t *e)
     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_style_pad_top(obj, 12, 0);
     
-    if (event_code == LV_EVENT_PRESSED) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
         char buf[FILE_INFO_MAX];
 
         File root = SD_FD_DRI.open(TARGET_FOLDER);
@@ -737,7 +737,7 @@ static void ui_event_settings(lv_event_t *e)
         _ui_screen_change(ui_setting, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0);
     }
 
-    if (event_code == LV_EVENT_PRESSED) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
         _ui_screen_change(ui_setting, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0);
     }
 }
@@ -927,7 +927,7 @@ void open_camera_cb(lv_event_t *e)
 static void ui_event_camera(lv_event_t *e)
 {
     lv_event_code_t event_code = lv_event_get_code(e);
-    if (event_code == LV_EVENT_PRESSED) {
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
             Serial.println("camera icon is clicked");
         _ui_screen_change(ui_camera, LV_SCR_LOAD_ANIM_FADE_ON, 200, 0);
         if(camera_timer)
@@ -2713,9 +2713,14 @@ void wifi_button_cd(lv_event_t *e)
     _ui_screen_change(ui_wifiset, LV_SCR_LOAD_ANIM_MOVE_LEFT, 200, 0);
 }
 
+
 void return_home_cd(void *)
 {
-    if(camera_timer)
+    if (current_app_screen) {
+        lv_obj_del(current_app_screen);
+        current_app_screen = NULL;
+    }
+    if (camera_timer)
         lv_timer_pause(camera_timer);
     _ui_screen_change(ui_home, LV_SCR_LOAD_ANIM_NONE, 200, 0);
 }
