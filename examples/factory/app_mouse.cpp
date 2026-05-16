@@ -23,7 +23,6 @@ static lv_timer_t *mtimer, *stimer;
 #define BTN_ROW  328
 #define NAV_ROW  440
 
-/* ── helpers ─────────────────────────────────────────────────────────── */
 static void send_key(uint8_t usage)
 {
     if (hid.isConnected()) { hid.pressKey(usage); hid.releaseKey(usage); }
@@ -54,74 +53,51 @@ static void mkcb(lv_obj_t *parent, int x, int y, int w, int h, const char *txt,
     }, LV_EVENT_CLICKED, (void*)(intptr_t)fn);
 }
 
-/* ── keyboard ────────────────────────────────────────────────────────── */
-static void kb_cb(lv_event_t *e)
-{
-    uint8_t code = (uint8_t)(intptr_t)lv_event_get_user_data(e);
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_set_size(btn, lv_obj_get_width(btn), lv_obj_get_height(btn) + 6);
-    lv_obj_set_style_radius(btn, 8, 0);
-    if (hid.isConnected()) { hid.pressKey(code); hid.releaseKey(code); }
-}
-
-/* ── nav key callbacks (deferred delete avoids dangling pointer) ─────── */
-static void nav_menu(void)  { send_key(0x76); }  /* Menu=Overview */
-static void nav_home(void)  { send_key(0x4A); }  /* Home */
-static void nav_back(void)  { send_key(0x29); }  /* Escape=Back */
-
-/* home+close: defer so event loop finishes before deleting scr */
+static void nav_menu(void)  { send_key(0x76); }
+static void nav_back(void)  { send_key(0x29); }
 static void nav_home_exit(void)
 {
     send_key(0x4A);
-    struct deferred_t { static void cb(void*) { if (scr) { lv_obj_del(scr); scr = NULL; } } };
-    lv_timer_create([](lv_timer_t *t) { deferred_t::cb(NULL); lv_timer_del(t); }, 10, NULL);
+    struct d { static void c(void*) { if (scr) { lv_obj_del(scr); scr = NULL; } } };
+    lv_timer_create([](lv_timer_t *t) { d::c(NULL); lv_timer_del(t); }, 10, NULL);
 }
 
-/* ── page switching ──────────────────────────────────────────────────── */
+static void kb_cb(lv_event_t *e)
+{
+    uint8_t code = (uint8_t)(intptr_t)lv_event_get_user_data(e);
+    if (hid.isConnected()) { hid.pressKey(code); hid.releaseKey(code); }
+}
+
 static void show_keyboard(void)
 {
     lv_obj_clean(btn_row);
-    lv_obj_set_size(btn_row, 222, 100);
-
-    auto k = [](int x, int y, int w, int h, const char *t, uint8_t code) {
+    lv_obj_set_size(btn_row, 222, 95);
+    auto addkey = [](int x, int y, int w, int h, const char *t, uint8_t c) {
         lv_obj_t *b = lv_btn_create(btn_row);
         lv_obj_set_size(b, w, h); lv_obj_set_pos(b, x, y);
         lv_obj_set_style_radius(b, 4, 0);
         lv_obj_t *l = lv_label_create(b); lv_label_set_text(l, t); lv_obj_center(l);
-        lv_obj_add_event_cb(b, kb_cb, LV_EVENT_PRESSING, (void*)(intptr_t)code);
-        lv_obj_add_event_cb(b, [](lv_event_t *e) {
-            lv_obj_t *b = lv_event_get_target(e);
-            lv_obj_set_size(b, lv_obj_get_width(b), lv_obj_get_height(b) - 6);
-            lv_obj_set_style_radius(b, 4, 0);
-        }, LV_EVENT_RELEASED, NULL);
+        lv_obj_add_event_cb(b, kb_cb, LV_EVENT_CLICKED, (void*)(intptr_t)c);
     };
-
-    /* Row 1 (Q-P): 10 keys, 18px wide, gaps 3px */
-    int y1 = 2, y2 = 24, y3 = 46, y4 = 68;
-    int k1 = 19, g1 = 3; /* key width, gap */
+    int y1=2, y2=24, y3=46, y4=68;
+    int w=20, g=2, o2=w+g, o3=o2*2;
     for (int i = 0; i < 10; i++) {
         char buf[2] = {"QWERTYUIOP"[i], 0};
-        k(2 + i*(k1+g1), y1, k1, 22, buf, 0x14+i);
+        addkey(2+i*(w+g), y1, w, 22, buf, 0x14+i);
     }
-    /* Row 2 (A-L): 9 keys, indent by 1 key */
-    int off2 = (k1+g1); /* one key offset */
     for (int i = 0; i < 9; i++) {
         char buf[2] = {"ASDFGHJKL"[i], 0};
-        k(2 + off2 + i*(k1+g1), y2, k1, 22, buf, 0x04+i);
+        addkey(2+o2+i*(w+g), y2, w, 22, buf, 0x04+i);
     }
-    /* Row 3 (Z-/): 8 keys (Z-M, comma, period) */
-    int off3 = (k1+g1)*2;
     for (int i = 0; i < 6; i++) {
         char buf[2] = {"ZXCVBNM"[i], 0};
-        k(2 + off3 + i*(k1+g1), y3, k1, 22, buf, 0x1D+i);
+        addkey(2+o3+i*(w+g), y3, w, 22, buf, 0x1D+i);
     }
-    k(2 + off3 + 6*(k1+g1), y3, k1, 22, ",", 0x36);
-    k(2 + off3 + 7*(k1+g1), y3, k1, 22, ".", 0x37);
-
-    /* Row 4: Space (wide), Bksp, Enter */
-    k(2,           y4, 90, 22, "Space", 0x2C);
-    k(96,          y4, 60, 22, "Bksp",  0x2A);
-    k(160,         y4, 60, 22, "Enter", 0x28);
+    addkey(2+o3+6*(w+g), y3, w, 22, ",", 0x36);
+    addkey(2+o3+7*(w+g), y3, w, 22, ".", 0x37);
+    addkey(2,   y4, 90, 22, "Space", 0x2C);
+    addkey(96,  y4, 60, 22, "Bksp",  0x2A);
+    addkey(160, y4, 60, 22, "Enter", 0x28);
     lv_label_set_text(page_lbl, " Keyboard ");
 }
 
@@ -130,13 +106,12 @@ static void switch_page(int p)
     page = p;
     lv_obj_clean(btn_row);
     lv_obj_set_size(btn_row, 222, 70);
-    if (page == 1) {  /* media */
+    if (page == 1) {
         auto mk = [](int x, int y, int w, int h, const char *t, MediaKeyReport k) {
             lv_obj_t *b = lv_btn_create(btn_row);
             lv_obj_set_size(b, w, h); lv_obj_set_pos(b, x, y);
             lv_obj_set_style_radius(b, 6, 0);
             lv_obj_t *l = lv_label_create(b); lv_label_set_text(l, t); lv_obj_center(l);
-            /* use a static MediaKeyReport copy so the callback doesn't capture a local ref */
             MediaKeyReport *kp = (MediaKeyReport*)malloc(sizeof(MediaKeyReport));
             *kp = k;
             lv_obj_add_event_cb(b, [](lv_event_t *e) {
@@ -152,7 +127,7 @@ static void switch_page(int p)
         lv_label_set_text(page_lbl, " Media ");
     } else if (page == 2) {
         show_keyboard();
-    } else {  /* mouse */
+    } else {
         mkcb(btn_row, 10, 4,  62, 40, "Left",   [](){ if(hid.isConnected()) hid.mouseClick(MOUSE_LEFT); });
         mkcb(btn_row, 80, 4,  62, 40, "Right",  [](){ if(hid.isConnected()) hid.mouseClick(MOUSE_RIGHT); });
         mkcb(btn_row, 150,4,  62, 40, "Scroll", [](){ if(hid.isConnected()) hid.mouseMove(0,0,1); });
@@ -160,7 +135,6 @@ static void switch_page(int p)
     }
 }
 
-/* ── touchpad handler ───────────────────────────────────────────────── */
 static void update_touch(lv_timer_t *t)
 {
     (void)t;
@@ -212,7 +186,6 @@ static void update_status(lv_timer_t *t)
     }
 }
 
-/* ── create ──────────────────────────────────────────────────────────── */
 lv_obj_t *mouse_app_create(void)
 {
     scr = lv_obj_create(NULL);
@@ -220,7 +193,6 @@ lv_obj_t *mouse_app_create(void)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x1a1a2e), 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* top bar */
     lv_obj_t *title = lv_label_create(scr);
     lv_label_set_text(title, "\u25C9 HID");
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 4, 4);
@@ -231,7 +203,6 @@ lv_obj_t *mouse_app_create(void)
     lv_obj_align(status_lbl, LV_ALIGN_TOP_RIGHT, -2, 4);
     lv_obj_set_style_text_color(status_lbl, lv_color_hex(0xAAAAAA), 0);
 
-    /* touchpad */
     lv_obj_t *pad_cont = lv_obj_create(scr);
     lv_obj_set_size(pad_cont, 218, PAD_H);
     lv_obj_align(pad_cont, LV_ALIGN_TOP_MID, 0, PAD_TOP);
@@ -254,7 +225,6 @@ lv_obj_t *mouse_app_create(void)
     lv_obj_align(page_lbl, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(page_lbl, " Mouse ");
 
-    /* action buttons */
     btn_row = lv_obj_create(scr);
     lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_size(btn_row, 222, 70);
@@ -263,17 +233,16 @@ lv_obj_t *mouse_app_create(void)
     lv_obj_set_style_border_width(btn_row, 0, 0);
     switch_page(0);
 
-    /* nav buttons at bottom (≡ ⌂ ◀) — below action buttons, safe from accidental press */
     nav_row = lv_obj_create(scr);
     lv_obj_clear_flag(nav_row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(nav_row, 222, 20);
+    lv_obj_set_size(nav_row, 222, 24);
     lv_obj_set_pos(nav_row, 0, NAV_ROW);
     lv_obj_set_style_bg_opa(nav_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(nav_row, 0, 0);
 
-    mkbtn(nav_row, 30, 0, 36, 18, "\u2261", [](lv_event_t*) { nav_menu(); }, NULL);
-    mkbtn(nav_row, 93, 0, 36, 18, "\u2302", [](lv_event_t*) { nav_home_exit(); }, NULL);
-    mkbtn(nav_row, 156,0, 36, 18, "\u25C0", [](lv_event_t*) { nav_back(); }, NULL);
+    mkbtn(nav_row, 30, 0, 36, 22, "\u2261", [](lv_event_t*) { nav_menu(); }, NULL);
+    mkbtn(nav_row, 93, 0, 36, 22, "\u2302", [](lv_event_t*) { nav_home_exit(); }, NULL);
+    mkbtn(nav_row, 156,0, 36, 22, "\u25C0", [](lv_event_t*) { nav_back(); }, NULL);
 
     indev = lv_indev_get_next(NULL);
     mtimer = lv_timer_create(update_touch, 50, NULL);
