@@ -20,8 +20,8 @@ static lv_timer_t *mtimer, *stimer;
 
 #define PAD_TOP  6
 #define PAD_H    338
-#define BTN_ROW  350
-#define NAV_ROW  460
+#define BTN_ROW  328
+#define NAV_ROW  440
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
 static void send_key(uint8_t usage)
@@ -81,7 +81,7 @@ static void nav_home_exit(void)
 static void show_keyboard(void)
 {
     lv_obj_clean(btn_row);
-    lv_obj_set_size(btn_row, 222, 108);
+    lv_obj_set_size(btn_row, 222, 100);
 
     auto k = [](int x, int y, int w, int h, const char *t, uint8_t code) {
         lv_obj_t *b = lv_btn_create(btn_row);
@@ -97,7 +97,7 @@ static void show_keyboard(void)
     };
 
     /* Row 1 (Q-P): 10 keys, 18px wide, gaps 3px */
-    int y1 = 4, y2 = 30, y3 = 56, y4 = 82;
+    int y1 = 2, y2 = 24, y3 = 46, y4 = 68;
     int k1 = 19, g1 = 3; /* key width, gap */
     for (int i = 0; i < 10; i++) {
         char buf[2] = {"QWERTYUIOP"[i], 0};
@@ -119,9 +119,9 @@ static void show_keyboard(void)
     k(2 + off3 + 7*(k1+g1), y3, k1, 22, ".", 0x37);
 
     /* Row 4: Space (wide), Bksp, Enter */
-    k(2,           y4, 90, 24, "Space", 0x2C);
-    k(96,          y4, 60, 24, "Bksp",  0x2A);
-    k(160,         y4, 60, 24, "Enter", 0x28);
+    k(2,           y4, 90, 22, "Space", 0x2C);
+    k(96,          y4, 60, 22, "Bksp",  0x2A);
+    k(160,         y4, 60, 22, "Enter", 0x28);
     lv_label_set_text(page_lbl, " Keyboard ");
 }
 
@@ -129,7 +129,7 @@ static void switch_page(int p)
 {
     page = p;
     lv_obj_clean(btn_row);
-    lv_obj_set_size(btn_row, 222, 90);
+    lv_obj_set_size(btn_row, 222, 70);
     if (page == 1) {  /* media */
         auto mk = [](int x, int y, int w, int h, const char *t, MediaKeyReport k) {
             lv_obj_t *b = lv_btn_create(btn_row);
@@ -247,17 +247,17 @@ lv_obj_t *mouse_app_create(void)
 
     coord_lbl = lv_label_create(scr);
     lv_obj_set_style_text_color(coord_lbl, lv_color_hex(0x88FF88), 0);
-    lv_obj_align(coord_lbl, LV_ALIGN_TOP_MID, 0, 347);
+    lv_obj_align(coord_lbl, LV_ALIGN_TOP_MID, 0, 322);
 
     page_lbl = lv_label_create(scr);
     lv_obj_set_style_text_color(page_lbl, lv_color_hex(0x888888), 0);
-    lv_obj_align(page_lbl, LV_ALIGN_BOTTOM_MID, 0, -22);
+    lv_obj_align(page_lbl, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_label_set_text(page_lbl, " Mouse ");
 
     /* action buttons */
     btn_row = lv_obj_create(scr);
     lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(btn_row, 222, 90);
+    lv_obj_set_size(btn_row, 222, 70);
     lv_obj_set_pos(btn_row, 0, BTN_ROW);
     lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_row, 0, 0);
