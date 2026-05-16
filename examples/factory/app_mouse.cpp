@@ -21,7 +21,7 @@ static lv_timer_t *mtimer, *stimer;
 #define PAD_TOP  6
 #define PAD_H    338
 #define BTN_ROW  328
-#define NAV_ROW  440
+#define NAV_ROW  420
 
 static void send_key(uint8_t usage)
 {
@@ -71,7 +71,7 @@ static void kb_cb(lv_event_t *e)
 static void show_keyboard(void)
 {
     lv_obj_clean(btn_row);
-    lv_obj_set_size(btn_row, 222, 95);
+    lv_obj_set_size(btn_row, 222, 80);
     auto addkey = [](int x, int y, int w, int h, const char *t, uint8_t c) {
         lv_obj_t *b = lv_btn_create(btn_row);
         lv_obj_set_size(b, w, h); lv_obj_set_pos(b, x, y);
@@ -79,25 +79,25 @@ static void show_keyboard(void)
         lv_obj_t *l = lv_label_create(b); lv_label_set_text(l, t); lv_obj_center(l);
         lv_obj_add_event_cb(b, kb_cb, LV_EVENT_CLICKED, (void*)(intptr_t)c);
     };
-    int y1=2, y2=24, y3=46, y4=68;
-    int w=20, g=2, o2=w+g, o3=o2*2;
+    int y1=1, y2=18, y3=35, y4=52, off=12;
+    int w=19, g=1, o2=off+5, o3=off+10;
     for (int i = 0; i < 10; i++) {
         char buf[2] = {"QWERTYUIOP"[i], 0};
-        addkey(2+i*(w+g), y1, w, 22, buf, 0x14+i);
+        addkey(off+i*(w+g), y1, w, 18, buf, 0x14+i);
     }
     for (int i = 0; i < 9; i++) {
         char buf[2] = {"ASDFGHJKL"[i], 0};
-        addkey(2+o2+i*(w+g), y2, w, 22, buf, 0x04+i);
+        addkey(o2+i*(w+g), y2, w, 18, buf, 0x04+i);
     }
     for (int i = 0; i < 6; i++) {
         char buf[2] = {"ZXCVBNM"[i], 0};
-        addkey(2+o3+i*(w+g), y3, w, 22, buf, 0x1D+i);
+        addkey(o3+i*(w+g), y3, w, 18, buf, 0x1D+i);
     }
-    addkey(2+o3+6*(w+g), y3, w, 22, ",", 0x36);
-    addkey(2+o3+7*(w+g), y3, w, 22, ".", 0x37);
-    addkey(2,   y4, 90, 22, "Space", 0x2C);
-    addkey(96,  y4, 60, 22, "Bksp",  0x2A);
-    addkey(160, y4, 60, 22, "Enter", 0x28);
+    addkey(o3+6*(w+g), y3, w, 18, ",", 0x36);
+    addkey(o3+7*(w+g), y3, w, 18, ".", 0x37);
+    addkey(off, y4, 80, 18, "Space", 0x2C);
+    addkey(off+84, y4, 60, 18, "Bksp",  0x2A);
+    addkey(off+148, y4, 60, 18, "Enter", 0x28);
     lv_label_set_text(page_lbl, " Keyboard ");
 }
 
@@ -222,7 +222,7 @@ lv_obj_t *mouse_app_create(void)
 
     page_lbl = lv_label_create(scr);
     lv_obj_set_style_text_color(page_lbl, lv_color_hex(0x888888), 0);
-    lv_obj_align(page_lbl, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_align(page_lbl, LV_ALIGN_BOTTOM_MID, 0, -18);
     lv_label_set_text(page_lbl, " Mouse ");
 
     btn_row = lv_obj_create(scr);
