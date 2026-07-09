@@ -333,8 +333,8 @@ static void draw_maze(void) {
             lv_obj_set_style_bg_color(o, color_dot, 0);
             lv_obj_set_style_radius(o, LV_RADIUS_CIRCLE, 0);
         } else if (cell==4) {
-            lv_obj_set_size(o, CELL, CELL);
-            lv_obj_set_style_bg_color(o, lv_color_hex(0x333333), 0);
+            /* ghost house interior — no visual, just logical barrier */
+            lv_obj_del(o); maze_obj[r][c]=NULL; continue;
         }
         maze_obj[r][c] = o;
     }
