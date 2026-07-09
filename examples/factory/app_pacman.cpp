@@ -19,7 +19,7 @@
 #define COLS      PM_COLS     /* 21 */
 #define ROWS      PM_ROWS     /* 23 */
 #define OX        ((SCR_W - COLS * CELL) / 2)   /* x=6 */
-#define OY        20          /* top margin for compact HUD */
+#define OY        24          /* top margin for HUD */
 #define MAZE_W    (COLS * CELL)   /* 210 */
 #define MAZE_H    (ROWS * CELL)   /* 230 */
 
@@ -975,19 +975,21 @@ lv_obj_t *pacman_game_create(void) {
     /* Init game state */
     restart_game();
 
-    /* D-pad controls — below maze at y=260 */
-    int dpy = OY + MAZE_H + 2;
+    /* D-pad controls — below maze, fills remaining vertical space */
+    int dpy = OY + MAZE_H + 4;
     int dpc = SCR_W / 2;
+    int bs = 64;  /* button size */
+    int sp = 80;  /* centre-to-centre spacing */
     struct { int x,y; const char *t; Dir d; } btns[] = {
-        {dpc-28, dpy,      LV_SYMBOL_UP,    DIR_UP},
-        {dpc-28, dpy+64,    LV_SYMBOL_DOWN,  DIR_DOWN},
-        {dpc-92, dpy+32,    LV_SYMBOL_LEFT,  DIR_LEFT},
-        {dpc+36, dpy+32,    LV_SYMBOL_RIGHT, DIR_RIGHT},
+        {dpc - bs/2, dpy,            LV_SYMBOL_UP,    DIR_UP},
+        {dpc - bs/2, dpy + sp,       LV_SYMBOL_DOWN,  DIR_DOWN},
+        {dpc - bs/2 - sp, dpy + sp/2, LV_SYMBOL_LEFT,  DIR_LEFT},
+        {dpc - bs/2 + sp, dpy + sp/2, LV_SYMBOL_RIGHT, DIR_RIGHT},
     };
     for (auto &b: btns) {
         lv_obj_t *btn = lv_btn_create(g_scr);
-        lv_obj_set_size(btn, 56, 56); lv_obj_set_pos(btn, b.x, b.y);
-        lv_obj_set_style_radius(btn, 10, 0);
+        lv_obj_set_size(btn, bs, bs); lv_obj_set_pos(btn, b.x, b.y);
+        lv_obj_set_style_radius(btn, 12, 0);
         lv_obj_t *l = lv_label_create(btn);
         lv_label_set_text(l, b.t); lv_obj_center(l);
         lv_obj_add_event_cb(btn, [](lv_event_t *e) {
