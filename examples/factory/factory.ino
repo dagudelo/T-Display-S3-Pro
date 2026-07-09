@@ -372,10 +372,8 @@ void setup()
     WiFi.disconnect(true);
     WiFi.onEvent(WiFiEvent);
 
-    const char *ntpServer1 = "pool.ntp.org";
-    const char *ntpServer2 = "time.nist.gov";
-    const char *tz  = "CST-8";                  //timezone
-    configTzTime(tz, ntpServer1, ntpServer2);
+    /* GMT-5 (Colombia, no DST) */
+    configTime(-5 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
     camera_init();
 

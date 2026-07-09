@@ -10,6 +10,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <EEPROM.h>
+#include <sys/time.h>
 
 /* WiFi credentials — stored in EEPROM by factory, fallback defaults */
 #ifndef CLIENT_SSID
@@ -104,6 +106,30 @@ static void draw_clock_face(lv_obj_t *parent)
     lv_label_set_text(dl, "--:--:--");
 }
 
+/* ── Timezone: GMT-5 (Colombia / EST, no DST) ─────────────────────── */
+#define GMT_OFFSET_SEC (-5 * 3600)
+#define DST_OFFSET_SEC 0
+
+/* ── EEPROM-backed RTC persistence ────────────────────────────────── */
+#define EEPROM_TIME_ADDR 10   /* 8 bytes: uint64_t unix timestamp */
+
+static void save_time_to_eeprom(void) {
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) == 0) {
+        EEPROM.put(EEPROM_TIME_ADDR, (uint64_t)tv.tv_sec);
+        EEPROM.commit();
+    }
+}
+
+static void load_time_from_eeprom(void) {
+    uint64_t saved = 0;
+    EEPROM.get(EEPROM_TIME_ADDR, saved);
+    if (saved > 1700000000) {  /* reasonable: after ~Nov 2023 */
+        struct timeval tv = { (time_t)saved, 0 };
+        settimeofday(&tv, NULL);
+    }
+}
+
 static void do_ntp_sync(void)
 {
     if (ntp_done) return;
@@ -117,15 +143,15 @@ static void do_ntp_sync(void)
         return;
     }
     lv_label_set_text(sync_label, "#00ff00 Syncing NTP...#");
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    /* Pass GMT offset + DST offset directly — no separate setenv needed */
+    configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, "pool.ntp.org", "time.nist.gov");
     struct tm ti;
     tries = 0;
     while (!getLocalTime(&ti) && tries++ < 20) { delay(500); }
-    const char *tz = "CST-8";
-    setenv("TZ", tz, 1); tzset();
     ntp_done = true;
     lv_label_set_text(sync_label, LV_SYMBOL_WIFI " Synced");
     lv_obj_set_style_text_color(sync_label, lv_color_hex(0x00FF00), 0);
+    save_time_to_eeprom();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     update_hands();
@@ -155,6 +181,10 @@ lv_obj_t *clock_app_create(void)
     lv_obj_set_style_text_color(sync_label, lv_color_hex(0xAAAAAA), 0);
 
     draw_clock_face(clock_scr);
+
+    /* Restore last-known time from EEPROM (survives power cycles) */
+    load_time_from_eeprom();
+    update_hands();
 
     /* NTP sync (async via timer so WiFi doesn't block UI) */
     sync_timer = lv_timer_create([](lv_timer_t*) { do_ntp_sync(); }, 100, NULL);
