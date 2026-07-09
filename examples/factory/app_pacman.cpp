@@ -969,7 +969,7 @@ lv_obj_t *pacman_game_create(void) {
     go_label = lv_label_create(g_scr);
     lv_obj_set_style_text_color(go_label, lv_color_hex(0xFF0000), 0);
     lv_label_set_text(go_label, "GAME OVER");
-    lv_obj_align(go_label, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_align(go_label, LV_ALIGN_CENTER, 0, -80);
     lv_obj_add_flag(go_label, LV_OBJ_FLAG_HIDDEN);
 
     /* Init game state */
