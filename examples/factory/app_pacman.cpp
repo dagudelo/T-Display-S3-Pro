@@ -19,7 +19,7 @@
 #define COLS      PM_COLS     /* 21 */
 #define ROWS      PM_ROWS     /* 23 */
 #define OX        ((SCR_W - COLS * CELL) / 2)   /* x=6 */
-#define OY        30          /* top margin for HUD */
+#define OY        20          /* top margin for compact HUD */
 #define MAZE_W    (COLS * CELL)   /* 210 */
 #define MAZE_H    (ROWS * CELL)   /* 230 */
 
@@ -451,9 +451,9 @@ static void ghost_target(int idx, int *tx, int *ty) {
     case GM_FRIGHTENED:
         *tx = -1; *ty = -1; return; /* random */
     case GM_EATEN:
-        *tx = 10; *ty = 9; return;  /* ghost house entrance */
+        *tx = 9; *ty = 9; return;  /* ghost house entrance */
     default:
-        *tx = 10; *ty = 9; return;
+        *tx = 9; *ty = 9; return;
     }
 }
 
@@ -575,10 +575,10 @@ static void move_ghost(int idx) {
 
     /* Leaving house */
     if (gh_mode[idx]==GM_LEAVING) {
-        /* Move toward door (col 10, row 9) and exit */
-        if (gh_col[idx]==10 && gh_row[idx]==9) {
+        /* Move toward door (col 9, row 9) and exit left */
+        if (gh_col[idx]==9 && gh_row[idx]==9) {
             gh_mode[idx] = (global_mode==GM_SCATTER) ? GM_SCATTER : GM_CHASE;
-            gh_dir[idx] = DIR_UP; /* exit upward */
+            gh_dir[idx] = DIR_LEFT; /* exit through the left-side gap */
         } else {
             /* Navigate to door */
             Dir best=DIR_NONE; int bd=999;
@@ -586,24 +586,24 @@ static void move_ghost(int idx) {
             for (int i=0;i<4;i++){Dir d=dir_priority[i];if(d==rev)continue;
                 if(!can_move_ghost(gh_col[idx],gh_row[idx],d))continue;
                 int nx=gh_col[idx]+dx[d],ny=gh_row[idx]+dy[d];
-                int dist=tile_dist(nx,ny,10,9);
+                int dist=tile_dist(nx,ny,9,9);
                 if(dist<bd){bd=dist;best=d;}}
             if (best!=DIR_NONE) gh_dir[idx]=best;
         }
     }
     /* Eaten: race to house */
     else if (gh_mode[idx]==GM_EATEN) {
-        if (gh_col[idx]==10 && (gh_row[idx]==9||gh_row[idx]==10||gh_row[idx]==11)) {
+        if (gh_col[idx]>=10 && gh_col[idx]<=12 && gh_row[idx]>=9 && gh_row[idx]<=11) {
             /* Arrived at house */
             gh_mode[idx]=GM_LEAVING;
-            gh_col[idx]=10; gh_row[idx]=10;
+            gh_col[idx]=11; gh_row[idx]=10;
         } else {
             Dir best=DIR_NONE; int bd=999;
             Dir rev=opposite(gh_dir[idx]);
             for (int i=0;i<4;i++){Dir d=dir_priority[i];if(d==rev)continue;
                 if(!can_move_ghost_no_house(gh_col[idx],gh_row[idx],d))continue;
                 int nx=gh_col[idx]+dx[d],ny=gh_row[idx]+dy[d];
-                int dist=tile_dist(nx,ny,10,9);
+                int dist=tile_dist(nx,ny,9,9);
                 if(dist<bd){bd=dist;best=d;}}
             if (best!=DIR_NONE) gh_dir[idx]=best;
         }
@@ -677,8 +677,8 @@ static void update_modes(void) {
             pm_mouth=0;
             lv_obj_set_pos(pacman_obj, cx(10), cy(17));
             draw_pacman_sprite(pacman_canvas, DIR_RIGHT, 0);
-            /* Reset ghosts */
-            uint8_t gx[4]={10,9,10,11}, gy[4]={9,10,10,10};
+            /* Reset ghosts — valid house positions */
+            uint8_t gx[4]={10,10,11,12}, gy[4]={9,10,10,10};
             for (int i=0; i<4; i++) {
                 gh_col[i]=gx[i]; gh_row[i]=gy[i];
                 gh_dir[i]=DIR_UP;
@@ -863,8 +863,8 @@ static void restart_level(void) {
     pm_skip_ctr=0; pm_mouth=0; pm_dying=false;
     lv_obj_set_pos(pacman_obj, cx(10), cy(17));
     draw_pacman_sprite(pacman_canvas, DIR_RIGHT, 0);
-    /* Ghosts */
-    uint8_t gx[4]={10,9,10,11}, gy[4]={9,10,10,10};
+    /* Ghosts — valid positions inside house (cols 10-12, rows 9-11) */
+    uint8_t gx[4]={10,10,11,12}, gy[4]={9,10,10,10};
     for (int i=0; i<4; i++) {
         gh_col[i]=gx[i]; gh_row[i]=gy[i]; gh_dir[i]=DIR_UP;
         gh_mode[i]=(i==BLINKY)?((global_mode==GM_SCATTER)?GM_SCATTER:GM_CHASE):GM_HOUSE;
@@ -881,7 +881,7 @@ static void restart_level(void) {
     const uint16_t *st = (level<=1)?scatter_times_l1:(level<=4)?scatter_times_l24:scatter_times_l5;
     mode_secs_remaining=st[0]; mode_tick_start=tick_sec();
     /* HUD */
-    lv_label_set_text_fmt(level_lbl,"Lv %d",level);
+    lv_label_set_text_fmt(level_lbl,"Lv%d",level);
 }
 
 static void restart_game(void) {
@@ -914,41 +914,35 @@ lv_obj_t *pacman_game_create(void) {
     lv_obj_set_style_bg_color(g_scr, color_black, 0);
     lv_obj_clear_flag(g_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* HUD */
+    /* HUD — single compact row: [Back] SCORE:0   L:3  Lv1 */
+    lv_obj_t *bb = lv_btn_create(g_scr);
+    lv_obj_set_size(bb, 28, 18); lv_obj_set_pos(bb, 1, 1);
+    lv_obj_t *bl = lv_label_create(bb);
+    lv_label_set_text(bl, LV_SYMBOL_LEFT); lv_obj_center(bl);
+    lv_obj_set_style_text_font(bl, &lv_font_montserrat_12, 0);
+    lv_obj_add_event_cb(bb, [](lv_event_t*) {
+        if (game_timer) { lv_timer_del(game_timer); game_timer=NULL; }
+        if (energizer_timer) { lv_timer_del(energizer_timer); energizer_timer=NULL; }
+        lv_obj_del(g_scr);
+    }, LV_EVENT_CLICKED, NULL);
+
     score_lbl = lv_label_create(g_scr);
     lv_obj_set_style_text_color(score_lbl, color_white, 0);
+    lv_obj_set_style_text_font(score_lbl, &lv_font_montserrat_12, 0);
     lv_label_set_text(score_lbl, "0");
-    lv_obj_align(score_lbl, LV_ALIGN_TOP_LEFT, 4, 16);
-
-    lv_obj_t *score_title = lv_label_create(g_scr);
-    lv_obj_set_style_text_color(score_title, color_white, 0);
-    lv_label_set_text(score_title, "SCORE");
-    lv_obj_align(score_title, LV_ALIGN_TOP_LEFT, 4, 4);
+    lv_obj_set_pos(score_lbl, 36, 2);
 
     lives_lbl = lv_label_create(g_scr);
     lv_obj_set_style_text_color(lives_lbl, color_white, 0);
+    lv_obj_set_style_text_font(lives_lbl, &lv_font_montserrat_12, 0);
     lv_label_set_text(lives_lbl, "3");
-    lv_obj_align(lives_lbl, LV_ALIGN_TOP_RIGHT, -4, 16);
-
-    lv_obj_t *lives_title = lv_label_create(g_scr);
-    lv_obj_set_style_text_color(lives_title, color_white, 0);
-    lv_label_set_text(lives_title, "LIVES");
-    lv_obj_align(lives_title, LV_ALIGN_TOP_RIGHT, -4, 4);
+    lv_obj_align(lives_lbl, LV_ALIGN_TOP_MID, 0, 2);
 
     level_lbl = lv_label_create(g_scr);
     lv_obj_set_style_text_color(level_lbl, color_white, 0);
-    lv_label_set_text(level_lbl, "Lv 1");
-    lv_obj_align(level_lbl, LV_ALIGN_TOP_RIGHT, -4, 32);
-
-    /* Back button */
-    lv_obj_t *bb = lv_btn_create(g_scr);
-    lv_obj_set_size(bb, 50, 24); lv_obj_align(bb, LV_ALIGN_TOP_LEFT, 50, 4);
-    lv_obj_t *bl = lv_label_create(bb);
-    lv_label_set_text(bl, LV_SYMBOL_LEFT " Back"); lv_obj_center(bl);
-    lv_obj_add_event_cb(bb, [](lv_event_t*) {
-        if (game_timer) { lv_timer_del(game_timer); game_timer=NULL; }
-        lv_obj_del(g_scr);
-    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_style_text_font(level_lbl, &lv_font_montserrat_12, 0);
+    lv_label_set_text(level_lbl, "Lv1");
+    lv_obj_align(level_lbl, LV_ALIGN_TOP_RIGHT, -2, 2);
 
     /* Score popup */
     score_popup = lv_label_create(g_scr);
@@ -982,18 +976,19 @@ lv_obj_t *pacman_game_create(void) {
     /* Init game state */
     restart_game();
 
-    /* D-pad controls */
-    int base = OY + MAZE_H + 16;
+    /* D-pad controls — below maze at y=260 */
+    int dpy = OY + MAZE_H + 10;
+    int dpc = SCR_W / 2;
     struct { int x,y; const char *t; Dir d; } btns[] = {
-        {SCR_W/2-24, base-56, LV_SYMBOL_UP,    DIR_UP},
-        {SCR_W/2-24, base+8,  LV_SYMBOL_DOWN,  DIR_DOWN},
-        {SCR_W/2-80, base-24, LV_SYMBOL_LEFT,  DIR_LEFT},
-        {SCR_W/2+32, base-24, LV_SYMBOL_RIGHT, DIR_RIGHT},
+        {dpc-28, dpy,      LV_SYMBOL_UP,    DIR_UP},
+        {dpc-28, dpy+64,    LV_SYMBOL_DOWN,  DIR_DOWN},
+        {dpc-92, dpy+32,    LV_SYMBOL_LEFT,  DIR_LEFT},
+        {dpc+36, dpy+32,    LV_SYMBOL_RIGHT, DIR_RIGHT},
     };
     for (auto &b: btns) {
         lv_obj_t *btn = lv_btn_create(g_scr);
-        lv_obj_set_size(btn, 48, 48); lv_obj_set_pos(btn, b.x, b.y);
-        lv_obj_set_style_radius(btn, 8, 0);
+        lv_obj_set_size(btn, 56, 56); lv_obj_set_pos(btn, b.x, b.y);
+        lv_obj_set_style_radius(btn, 10, 0);
         lv_obj_t *l = lv_label_create(btn);
         lv_label_set_text(l, b.t); lv_obj_center(l);
         lv_obj_add_event_cb(btn, [](lv_event_t *e) {
