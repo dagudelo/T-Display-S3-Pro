@@ -54,7 +54,7 @@ static const uint8_t default_maze[ROWS][COLS] = {
     {1,2,2,2,2,1,2,2,2,0,2,2,2,0,2,2,2,1,2,2,1},
     {1,1,1,1,2,1,1,1,0,1,0,1,0,1,0,1,1,1,2,1,1},
     {0,0,0,1,2,1,0,0,0,0,0,0,0,0,0,0,0,1,2,0,0},
-    {1,1,1,1,2,1,1,1,0,1,1,1,1,1,0,1,1,1,2,1,1},
+    {1,1,1,1,2,1,1,1,0,1,0,1,1,1,0,1,1,1,2,1,1},
     {0,0,0,0,2,0,0,0,0,1,4,4,4,1,0,0,0,0,2,0,0},
     {0,0,0,0,2,1,0,0,0,1,4,4,4,1,0,0,0,1,2,0,0},
     {1,1,1,1,2,1,0,0,0,1,4,4,4,1,0,0,0,1,2,1,1},
@@ -451,9 +451,9 @@ static void ghost_target(int idx, int *tx, int *ty) {
     case GM_FRIGHTENED:
         *tx = -1; *ty = -1; return; /* random */
     case GM_EATEN:
-        *tx = 9; *ty = 9; return;  /* ghost house entrance */
+        *tx = 10; *ty = 9; return;  /* ghost house entrance */
     default:
-        *tx = 9; *ty = 9; return;
+        *tx = 10; *ty = 9; return;
     }
 }
 
@@ -575,18 +575,17 @@ static void move_ghost(int idx) {
 
     /* Leaving house */
     if (gh_mode[idx]==GM_LEAVING) {
-        /* Move toward door (col 9, row 9) and exit left */
-        if (gh_col[idx]==9 && gh_row[idx]==9) {
+        /* Move toward door (col 10, row 9) and exit up */
+        if (gh_col[idx]==10 && gh_row[idx]==9) {
             gh_mode[idx] = (global_mode==GM_SCATTER) ? GM_SCATTER : GM_CHASE;
-            gh_dir[idx] = DIR_LEFT; /* exit through the left-side gap */
+            gh_dir[idx] = DIR_UP;
         } else {
-            /* Navigate to door */
             Dir best=DIR_NONE; int bd=999;
             Dir rev=opposite(gh_dir[idx]);
             for (int i=0;i<4;i++){Dir d=dir_priority[i];if(d==rev)continue;
                 if(!can_move_ghost(gh_col[idx],gh_row[idx],d))continue;
                 int nx=gh_col[idx]+dx[d],ny=gh_row[idx]+dy[d];
-                int dist=tile_dist(nx,ny,9,9);
+                int dist=tile_dist(nx,ny,10,9);
                 if(dist<bd){bd=dist;best=d;}}
             if (best!=DIR_NONE) gh_dir[idx]=best;
         }
@@ -603,7 +602,7 @@ static void move_ghost(int idx) {
             for (int i=0;i<4;i++){Dir d=dir_priority[i];if(d==rev)continue;
                 if(!can_move_ghost_no_house(gh_col[idx],gh_row[idx],d))continue;
                 int nx=gh_col[idx]+dx[d],ny=gh_row[idx]+dy[d];
-                int dist=tile_dist(nx,ny,9,9);
+                int dist=tile_dist(nx,ny,10,9);
                 if(dist<bd){bd=dist;best=d;}}
             if (best!=DIR_NONE) gh_dir[idx]=best;
         }
@@ -977,7 +976,7 @@ lv_obj_t *pacman_game_create(void) {
     restart_game();
 
     /* D-pad controls — below maze at y=260 */
-    int dpy = OY + MAZE_H + 10;
+    int dpy = OY + MAZE_H + 2;
     int dpc = SCR_W / 2;
     struct { int x,y; const char *t; Dir d; } btns[] = {
         {dpc-28, dpy,      LV_SYMBOL_UP,    DIR_UP},
