@@ -14,8 +14,12 @@
 #include "app_pacman.h"
 #include "app_tetris.h"
 #include "app_clock.h"
+#include "app_clock_weather.h"
 #include "app_files.h"
 #include "app_mouse.h"
+#include "app_music.h"
+#include "app_stocks.h"
+#include "app_wifi_details.h"
 
 #define TARGET_FOLDER "/"
 #define UI_CAMERA_CANVAS 1

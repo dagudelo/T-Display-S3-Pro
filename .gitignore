@@ -5,3 +5,4 @@ build
 Test*
 *.github
 *.loacl
+.codewhale/

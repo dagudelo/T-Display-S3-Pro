@@ -3,7 +3,7 @@
 #include "lvgl.h"
 #include "stdio.h"
 
-#define WIN 0
+#define WIN FALSE
 
 #if !WIN
 #include "WiFi.h"
@@ -1534,7 +1534,7 @@ static void ui_datetimeui_screen_init(void)
     lv_obj_set_width(ui_datetimelabel1, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_datetimelabel1, LV_SIZE_CONTENT);
     lv_obj_set_align(ui_datetimelabel1, LV_ALIGN_RIGHT_MID);
-    lv_label_set_text(ui_datetimelabel1, "Beijing");
+    lv_label_set_text(ui_datetimelabel1, "Bogota");
     lv_obj_set_style_text_color(ui_datetimelabel1, lv_color_hex(0x787878), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_datetimelabel1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 

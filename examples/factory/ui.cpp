@@ -498,7 +498,8 @@ void ui_event_mail(lv_event_t *e)
 
 void ui_event_music(lv_event_t *e)
 {
-    prompt_info("music cannot be used", UI_PROMPT_TIME);
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        current_app_screen = music_app_create();
 }
 
 void ui_event_notes(lv_event_t *e)
@@ -529,7 +530,8 @@ void ui_event_find_my(lv_event_t *e)
 
 void ui_event_clock(lv_event_t *e)
 {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) current_app_screen = clock_app_create();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        current_app_screen = clock_weather_app_create();
 }
 
 void ui_event_podcasts(lv_event_t *e)
@@ -549,7 +551,8 @@ void ui_event_shortcuts(lv_event_t *e)
 
 void ui_event_stocks(lv_event_t *e)
 {
-    prompt_info("stocks cannot be used", UI_PROMPT_TIME);
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        current_app_screen = stocks_app_create();
 }
 
 void ui_event_files(lv_event_t *e)
@@ -885,11 +888,23 @@ static void camera_video_play(lv_timer_t *t)
             
             if(sd_card_get_init_flag()){
                 static uint16_t img_idx = 1000;
-                char path[32];
-                lv_snprintf(path,32, "%s%s%d%s", TARGET_FOLDER, "/img", img_idx++, ".bmp");
-                // sd_card_write(path, frame->buf, frame->len);
-                // sd_card_bmp_img(path, frame->width, frame->height, frame->buf);
+                struct tm ti;
+                time_t now;
+                time(&now);
+                localtime_r(&now, &ti);
+                char day_folder[24];
+                snprintf(day_folder, sizeof(day_folder), "/photos/%04d-%02d-%02d",
+                         ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday);
+                SD_FD_DRI.mkdir("/photos");
+                SD_FD_DRI.mkdir(day_folder);
+
+                char path[48];
+                lv_snprintf(path, sizeof(path), "%s/img%04d.bmp", day_folder, img_idx++);
                 sd_card_bmp_lvgl(path, frame->width, frame->height, ui_camera_canvas);
+
+                char toast[64];
+                snprintf(toast, sizeof(toast), "Saved: %s", path);
+                prompt_info(toast, 2000);
             }else{
                 Serial.println("No find SD card!");
                 prompt_info("No find SD card!", UI_PROMPT_TIME);
@@ -1248,6 +1263,7 @@ static void show_wifiName(lv_obj_t *parent, int len)
 
 void wifi_connect_cd(void)
 {
+    static bool showed_details = false;
 #if !WIN
     lv_obj_t *connection_status = lv_obj_get_child(ui_wificonnect, 2);
     if (WiFi.status() == WL_CONNECTED) {
@@ -1262,6 +1278,16 @@ void wifi_connect_cd(void)
         lv_obj_clear_flag(ui_wifiset_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(ui_datetimeui_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         animation_stop();
+        /* Show brief toast with IP on connect */
+        if (!showed_details) {
+            showed_details = true;
+            char toast[64];
+            snprintf(toast, sizeof(toast), "WiFi: %s\nIP: %s",
+                     WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            prompt_info(toast, 4000);
+            lv_obj_add_event_cb(ui_home_wifi_icon,
+                [](lv_event_t *) { wifi_details_app_create(); }, LV_EVENT_CLICKED, NULL);
+        }
     } else {
         lv_obj_add_flag(ui_home_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(ui_about_wifi_icon, LV_OBJ_FLAG_HIDDEN);
@@ -1270,6 +1296,7 @@ void wifi_connect_cd(void)
         lv_obj_add_flag(ui_datetimeui_wifi_icon, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(connection_status, "connect failed!!!");
         animation_stop();
+        showed_details = false;
     }
 #endif
 }
