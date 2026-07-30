@@ -33,6 +33,14 @@ Each exposes a single `xxx_app_create()` → `lv_obj_t*`. All state is file-stat
 - **No audio DAC**: ESP32-S3 lacks internal DAC; board schematic has no I2S codec. Music app uses PWM on GPIO16 (vibrating motor) for simple tones.
 - **Stock/weather APIs**: Free-tier, no API keys required. Open-Meteo (weather), Yahoo Finance v8 (stocks).
 
+### Testing environment
+Three-tier test suite:
+1. **`pio run -e factory`** — full PlatformIO firmware build (syntax, type, link checks)
+2. **`python3 scripts/qemu_test.py`** — QEMU ESP32-S3 emulation (Espressif fork, `qemu-system-xtensa`). Boots firmware, checks ROM boot + entry point. Crashes on peripheral access are expected (QEMU lacks TFT/touch/camera/PMU emulation).
+3. **`g++ -std=c++17 tests/test_apps.cpp && ./a.out`** — 30 g++ unit tests for pure logic (JSON parsers, buffer safety, array indexing, code classification)
+
+QEMU setup: download binary from `github.com/espressif/qemu/releases`, extract, copy `qemu/bin/qemu-system-xtensa` to `~/.local/bin/` and `qemu/share/qemu/esp32s3_rev0_rom.bin` to `~/.local/share/qemu/`.
+
 ## 2026-05-14: Touch Latency Fix
 
 **Problem**: Touch response on the T-Display-S3-Pro was very slow and didn't allow interaction with UI functionalities.

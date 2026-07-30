@@ -3,6 +3,7 @@
 script
 build
 Test*
+!tests/
 *.github
 *.loacl
 .codewhale/
