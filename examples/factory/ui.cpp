@@ -486,6 +486,8 @@ char *couter_list[] = {
     "%", "0", ".",
 };
 
+static lv_obj_t *current_app_screen = NULL;
+
 void ui_event_facetime(lv_event_t *e)
 {
     prompt_info("facetime cannot be used", UI_PROMPT_TIME);
@@ -511,7 +513,6 @@ void ui_event_books(lv_event_t *e)
 {
     prompt_info("books cannot be used", UI_PROMPT_TIME);
 }
-static lv_obj_t *current_app_screen = NULL;
 
 void ui_event_contacts(lv_event_t *e)
 {
