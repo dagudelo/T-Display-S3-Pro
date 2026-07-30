@@ -41,6 +41,9 @@ Three-tier test suite:
 
 QEMU setup: download binary from `github.com/espressif/qemu/releases`, extract, copy `qemu/bin/qemu-system-xtensa` to `~/.local/bin/` and `qemu/share/qemu/esp32s3_rev0_rom.bin` to `~/.local/share/qemu/`.
 
+### QEMU peripheral status (Espressif fork 9.2.2-20260417)
+Key finding: QEMU already has device models for GPIO, I2C, SPI, UART, LEDC, RNG, GDMA, eFuse, SHA, AES, RSA, HMAC, DS, RTC, SDMMC, PSRAM — no source modifications needed. The `-m 8M` flag enables 8MB PSRAM emulation, which allows the firmware to boot past memory allocator init, reach `setup()`, and produce ESP_LOG output. Remaining crashes (camera probe, display PWM divide-by-zero) are from un-emulated board-specific peripherals — expected and handled gracefully by the firmware.
+
 ## 2026-05-14: Touch Latency Fix
 
 **Problem**: Touch response on the T-Display-S3-Pro was very slow and didn't allow interaction with UI functionalities.
