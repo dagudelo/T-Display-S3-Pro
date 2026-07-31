@@ -242,77 +242,74 @@ void updateTime(lv_timer_t *t)
 
 
 
+/**
+ * Li-Po battery voltage-to-percentage mapping (3.4V = 0%, 4.2V = 100%).
+ * Uses a 10-sample moving average for stable readings.
+ */
+static uint16_t batt_samples[10] = {0};
+static uint8_t batt_idx = 0;
+
+static uint8_t batt_voltage_to_pct(uint16_t mv)
+{
+    if (mv >= 4200) return 100;
+    if (mv <= 3400) return 0;
+    /* Linear interpolation: 3400-4200mV -> 0-100% */
+    return (uint8_t)(((uint32_t)(mv - 3400) * 100) / 800);
+}
+
+static void update_battery_ui(uint8_t pct)
+{
+    char str[8];
+    snprintf(str, sizeof(str), "%d%%", pct);
+    int bar_w = (pct * 16) / 100;
+    if (bar_w < 1) bar_w = 1;
+
+    lv_label_set_text(ui_home_electric_quantity_lable, str);
+    if (ui_home_electric_quantity_icon) {
+        lv_obj_t *b = lv_obj_get_child(ui_home_electric_quantity_icon, 1);
+        if (b) lv_obj_set_size(b, bar_w, 6);
+    }
+    lv_label_set_text(ui_wifiset_wlanbatteryp, str);
+    if (wifiset_electric_quantity_icon) {
+        lv_obj_t *b = lv_obj_get_child(wifiset_electric_quantity_icon, 1);
+        if (b) lv_obj_set_size(b, bar_w, 6);
+    }
+    lv_label_set_text(ui_datetimeui_electric_label, str);
+    if (datetimeui_electric_quantity_icon) {
+        lv_obj_t *b = lv_obj_get_child(datetimeui_electric_quantity_icon, 1);
+        if (b) lv_obj_set_size(b, bar_w, 6);
+    }
+    lv_label_set_text(ui_aboutui_electric_label, str);
+    if (aboutui_electric_quantity_icon) {
+        lv_obj_t *b = lv_obj_get_child(aboutui_electric_quantity_icon, 1);
+        if (b) lv_obj_set_size(b, bar_w, 6);
+    }
+    lv_label_set_text(setting_electric_quantity_lable, str);
+    if (setting_electric_quantity_icon) {
+        lv_obj_t *b = lv_obj_get_child(setting_electric_quantity_icon, 1);
+        if (b) lv_obj_set_size(b, bar_w, 6);
+    }
+}
+
 void set_usbAndBattery(uint16_t usb_sats, uint16_t usb_voltage, uint16_t battery)
 {
-    static int percentage_old = 0;
-    lv_label_set_text(ui_usb_sats, (usb_sats ? "Connected" : "Disconnect"));
-    char buf_usb_voltage[20] = { 0 };
-    sprintf(buf_usb_voltage, "%dmV", usb_voltage);
-    lv_label_set_text(ui_usb_voltage, (const char *)buf_usb_voltage);
-    char buf_battery_voltage[20] = { 0 };
-    sprintf(buf_battery_voltage, "%dmV", battery);
-    lv_label_set_text(ui_battery_voltage, buf_battery_voltage);
+    /* USB status */
+    lv_label_set_text(ui_usb_sats, usb_sats ? "Connected" : "Disconnect");
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%dmV", usb_voltage);
+    lv_label_set_text(ui_usb_voltage, buf);
+    snprintf(buf, sizeof(buf), "%dmV", battery);
+    lv_label_set_text(ui_battery_voltage, buf);
 
-    if (battery - 3400 >= 440) {
-        lv_label_set_text(ui_home_electric_quantity_lable, "100%");
-        lv_obj_t *boj = lv_obj_get_child(ui_home_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, 22 - 6, 12 - 6);
+    /* 10-sample moving average for stable battery readings */
+    batt_samples[batt_idx] = battery;
+    batt_idx = (batt_idx + 1) % 10;
+    uint32_t sum = 0;
+    for (int i = 0; i < 10; i++) sum += batt_samples[i];
+    uint16_t avg_mv = sum / 10;
 
-        lv_label_set_text(ui_wifiset_wlanbatteryp, "100%");
-        boj = lv_obj_get_child(ui_home_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, 22 - 6, 12 - 6);
-
-        lv_label_set_text(ui_datetimeui_electric_label, "100%");
-        boj = lv_obj_get_child(datetimeui_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, 22 - 6, 12 - 6);
-
-        lv_label_set_text(ui_aboutui_electric_label, "100%");
-        boj = lv_obj_get_child(aboutui_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, 22 - 6, 12 - 6);
-
-        lv_label_set_text(setting_electric_quantity_lable, "100%");
-        boj = lv_obj_get_child(setting_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, 22 - 6, 12 - 6);
-    } else {
-        int percentage = (int)((float((float)(3840 - battery) / (float)440)) * 100);
-        percentage = 100 - percentage;
-        if (percentage < 0)
-            percentage = 0;
-        if (!usb_sats) {
-            if (!percentage_old || !percentage) {
-                percentage_old = percentage;
-            } else if (percentage_old < percentage) {
-                if (percentage - percentage_old < 10) {
-                    return;
-                }
-            }
-        } else {
-            percentage_old = percentage;
-        }
-        char str[20] = { 0 };
-        sprintf(str, "%02d%%", percentage);
-        lv_label_set_text(ui_home_electric_quantity_lable, str);
-        lv_obj_t *boj = lv_obj_get_child(ui_home_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, (int)(((float)16) * ((float)percentage / (float)100)), 6);
-
-        lv_label_set_text(ui_wifiset_wlanbatteryp, str);
-        boj = lv_obj_get_child(wifiset_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, (int)(((float)16) * ((float)percentage / (float)100)), 6);
-
-        lv_label_set_text(ui_datetimeui_electric_label, str);
-        boj = lv_obj_get_child(datetimeui_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, (int)(((float)16) * ((float)percentage / (float)100)), 6);
-
-        lv_label_set_text(ui_aboutui_electric_label, str);
-        boj = lv_obj_get_child(aboutui_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, (int)(((float)16) * ((float)percentage / (float)100)), 6);
-
-        lv_label_set_text(setting_electric_quantity_lable, str);
-        boj = lv_obj_get_child(setting_electric_quantity_icon, 1);
-        lv_obj_set_size(boj, (int)(((float)16) * ((float)percentage / (float)100)), 6);
-
-        percentage_old = percentage;
-    }
+    uint8_t pct = batt_voltage_to_pct(avg_mv);
+    update_battery_ui(pct);
 }
 
 static void backgBut_explain(lv_obj_t *parent, lv_obj_t **obj, char *showData, lv_event_cb_t event_cb, void *event_userData, const void *backg, lv_coord_t x, lv_coord_t y)
@@ -1283,7 +1280,7 @@ void wifi_connect_cd(void)
         if (!showed_details) {
             showed_details = true;
             char toast[64];
-            snprintf(toast, sizeof(toast), "WiFi: %s\nIP: %s",
+            snprintf(toast, sizeof(toast), "WiFi: %.20s\nIP: %s",
                      WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
             prompt_info(toast, 4000);
             lv_obj_add_event_cb(ui_home_wifi_icon,

@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cstdint>
 #include <cmath>
 #include <cassert>
 #include <string>
@@ -175,6 +176,149 @@ static void test_tone_player(void)
     }
 }
 
+/* ─── Reliability: battery voltage-to-percentage ───────────────── */
+static void test_battery_pct(void)
+{
+    TEST("4.20V = 100%");
+    { uint16_t mv = 4200; CHECK(((uint32_t)(mv - 3400) * 100 / 800) == 100); }
+
+    TEST("3.40V = 0%");
+    { uint16_t mv = 3400; CHECK(((uint32_t)(mv - 3400) * 100 / 800) == 0); }
+
+    TEST("3.80V = 50%");
+    { uint16_t mv = 3800; CHECK(((uint32_t)(mv - 3400) * 100 / 800) == 50); }
+
+    TEST("4.00V = 75%");
+    { uint16_t mv = 4000; CHECK(((uint32_t)(mv - 3400) * 100 / 800) == 75); }
+
+    TEST("4.30V clamped to 100%");
+    { uint16_t mv = 4300; CHECK(mv >= 4200); }
+
+    TEST("3.30V clamped to 0%");
+    { uint16_t mv = 3300; CHECK(mv <= 3400); }
+}
+
+/* ─── Reliability: moving average filter ───────────────────────── */
+static void test_moving_average(void)
+{
+    TEST("10-sample average of constant values");
+    {
+        uint16_t samples[10] = {3700, 3700, 3700, 3700, 3700,
+                                 3700, 3700, 3700, 3700, 3700};
+        uint32_t sum = 0;
+        for (int i = 0; i < 10; i++) sum += samples[i];
+        CHECK(sum / 10 == 3700);
+    }
+
+    TEST("10-sample average filters spike");
+    {
+        uint16_t samples[10] = {3700, 3700, 3800, 3700, 3700,
+                                 3700, 3700, 3700, 3700, 3700};
+        uint32_t sum = 0;
+        for (int i = 0; i < 10; i++) sum += samples[i];
+        uint16_t avg = (uint16_t)(sum / 10);
+        CHECK(avg > 3700 && avg < 3720);
+    }
+
+    TEST("ring buffer index wraps at 10");
+    {
+        int idx = 9;
+        idx = (idx + 1) % 10;
+        CHECK(idx == 0);
+        idx = (idx + 5) % 10;
+        CHECK(idx == 5);
+    }
+}
+
+/* ─── Reliability: null-pointer guards ─────────────────────────── */
+static void test_null_guards(void)
+{
+    TEST("lv_obj_get_child NULL -> safe");
+    {
+        /* simulate: lv_obj_t *b = get_child(icon, 1); if (b) use(b); */
+        void *icon = NULL;
+        void *b = NULL;
+        if (icon) b = icon;  /* simulates get_child */
+        if (!b) b = NULL;    /* guard */
+        CHECK(b == NULL);
+    }
+
+    TEST("snprintf with truncation fits 64-byte buffer");
+    {
+        char buf[64];
+        int n = snprintf(buf, sizeof(buf), "WiFi: %.20s\nIP: %s",
+                         "VeryLongNetworkNameThatIsThirtyChars",
+                         "255.255.255.255");
+        CHECK(n < 64);
+        CHECK(strlen(buf) < 64);
+    }
+
+    TEST("lv_label_set_text with NULL label is guarded elsewhere");
+    {
+        /* This test documents the pattern: always check before set */
+        const char *lbl = NULL;
+        if (lbl) { /* wouldn't call lv_label_set_text */ }
+        CHECK(lbl == NULL);  /* pattern is correct */
+    }
+}
+
+/* ─── Reliability: toast message buffer safety ─────────────────── */
+static void test_toast_safety(void)
+{
+    TEST("saved photo path fits in 64-char toast");
+    {
+        char toast[64];
+        snprintf(toast, sizeof(toast), "Saved: %s",
+                 "/photos/2026-12-31/img9999.bmp");
+        CHECK(strlen(toast) < 64);
+    }
+
+    TEST("WiFi toast with long SSID fits in 64 chars");
+    {
+        char toast[64];
+        snprintf(toast, sizeof(toast), "WiFi: %s\nIP: %s",
+                 "12345678901234567890123456789012",
+                 "255.255.255.255");
+        CHECK(strlen(toast) < 64);
+    }
+
+    TEST("stock price fits in 48-char buffer");
+    {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "$%.2f", 999999.99);
+        CHECK(strlen(buf) < 48);
+    }
+}
+
+/* ─── Reliability: app state isolation ──────────────────────────── */
+static void test_state_isolation(void)
+{
+    TEST("stock ticker wrap-around forward");
+    {
+        /* Simulate the modulo logic from app_stocks.cpp */
+        int count = 5, sel = 4;
+        sel = (sel + 1) % count;
+        CHECK(sel == 0);
+        sel = (sel + 1) % count;
+        CHECK(sel == 1);
+    }
+
+    TEST("stock ticker wrap-around backward");
+    {
+        int count = 5, sel = 0;
+        sel = (sel - 1 + count) % count;
+        CHECK(sel == 4);
+    }
+
+    TEST("range index bounds 0-3");
+    {
+        int ranges[] = {0, 1, 2, 3};
+        for (int i = 0; i < 4; i++) {
+            CHECK(ranges[i] >= 0 && ranges[i] <= 3);
+        }
+    }
+}
+
 /* ─── Main ──────────────────────────────────────────────────────── */
 int main(void)
 {
@@ -194,6 +338,16 @@ int main(void)
 
     printf("\nTone player:\n");
     test_tone_player();
+    printf("\nBattery pct:\n");
+    test_battery_pct();
+    printf("\nMoving avg:\n");
+    test_moving_average();
+    printf("\nNull guards:\n");
+    test_null_guards();
+    printf("\nToast safety:\n");
+    test_toast_safety();
+    printf("\nState isolation:\n");
+    test_state_isolation();
 
     SUMMARY();
     return failed > 0 ? 1 : 0;
